@@ -10,6 +10,11 @@
 #include "net/tcp/tcp_client.h"
 #include "event/io_thread_pool.h"
 
+#define TCP_CONNECTION_POOL_IO_THREAD_POOL_SIZE 4
+#define TCP_CONNECTION_POOL_MIN_SIZE 20
+#define TCP_CONNECTION_POOL_MAX_SIZE 50
+#define TCP_CONNECTION_POOL_IDLE_TIME 60
+
 namespace mrpc {
     class TCPClientPool {
     public:
@@ -18,9 +23,9 @@ namespace mrpc {
         TCPClientPool(NetAddr::ptr peer_addr,
                       EventLoop::ptr event_loop,
                       ProtocolType protocol_type = ProtocolType::HTTP_Protocol,
-                      uint32_t min_size = 20,
-                      uint32_t max_size = 50,
-                      uint32_t max_idle_time = 60  // 最大空闲时间(秒)
+                      uint32_t min_size = TCP_CONNECTION_POOL_MIN_SIZE,
+                      uint32_t max_size = TCP_CONNECTION_POOL_MAX_SIZE,
+                      uint32_t max_idle_time = TCP_CONNECTION_POOL_IDLE_TIME  // 最大空闲时间(秒)
         );
 
         ~TCPClientPool();
@@ -34,7 +39,8 @@ namespace mrpc {
         // 异步创建一个新的连接
         void createConnectionAsync(std::function<void(TCPClient::ptr)> callback);
 
-        void createConnection();
+        // 同步创建connection
+        void createConnectionSync();
 
 
     private:
@@ -54,12 +60,10 @@ namespace mrpc {
         uint32_t m_max_size;                         // 最大连接数
         uint32_t m_max_idle_time;                    // 最大空闲时间(秒)
         ProtocolType m_protocol_type;                // 协议类型
-
-        std::unique_ptr<IOThreadPool> m_io_thread_pool;
-
         std::queue<PooledClient> m_idle_clients;   // 空闲连接队列
         std::set<TCPClient::ptr> m_active_clients; // 活跃连接集合
         std::mutex m_mutex;                          // 保护连接池的互斥锁
+        std::unique_ptr<IOThreadPool> m_io_thread_pool;
     };
 }
 

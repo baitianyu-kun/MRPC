@@ -236,7 +236,7 @@ namespace mrpc {
                                              this_channel->getClosure()->Run();
                                          }
                                          this_channel->m_tcp_client_pool->releaseClient(client);
-                                         client->clear();
+                                         client->resetNew();
                                      });
             });
         });

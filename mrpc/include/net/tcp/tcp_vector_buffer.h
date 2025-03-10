@@ -42,6 +42,8 @@ namespace mrpc {
 
         int writeAbleSize() const override {return m_buffer.size() - m_write_index;};
 
+        void clearBuffer();
+
 
     public:
         void resizeBuffer(int new_size);

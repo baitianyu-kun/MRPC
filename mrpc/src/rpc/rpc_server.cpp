@@ -14,6 +14,11 @@ namespace mrpc {
         Timestamp timestamp(addTime(Timestamp::now(), HEART_TIMER_EVENT_INTERVAL));
         auto new_timer_id = getMainEventLoop()->addTimerEvent(std::bind(&RPCServer::heartToCenter, this), timestamp,
                                                               HEART_TIMER_EVENT_INTERVAL);
+        m_tcp_client_pool = std::make_unique<TCPClientPool>(
+                m_register_addr,
+                EventLoop::GetCurrentEventLoop(),
+                m_protocol_type
+        );
         initServlet();
     }
 
@@ -30,8 +35,6 @@ namespace mrpc {
     }
 
     void RPCServer::heartToCenter() {
-        auto io_thread = std::make_unique<IOThread>();
-        auto client = std::make_shared<TCPClient>(m_register_addr, io_thread->getEventLoop(), m_protocol_type);
         body_type body;
         body["server_ip"] = m_local_addr->getStringIP();
         body["server_port"] = m_local_addr->getStringPort();
@@ -45,18 +48,18 @@ namespace mrpc {
             MPbManager::createRequest(std::static_pointer_cast<MPbProtocol>(request),
                                       MSGType::RPC_REGISTER_HEART_SERVER_REQUEST, body);
         }
-        client->connect([&client, request]() {
-            client->sendRequest(request, [&client, request](Protocol::ptr req) {
-                client->recvResponse(request->m_msg_id, [&client, request](Protocol::ptr rsp) {
+        m_tcp_client_pool->getConnectionAsync([this, request](TCPClient::ptr client) {
+            client->sendRequest(request, [this, client, request](Protocol::ptr req) {
+                client->recvResponse(request->m_msg_id, [this, client, request](Protocol::ptr rsp) {
                     INFOLOG("%s | success heart to center, peer addr [%s], local addr[%s]",
                             rsp->m_msg_id.c_str(),
                             client->getPeerAddr()->toString().c_str(),
                             client->getLocalAddr()->toString().c_str());
-                    client->getEventLoop()->stop();
+                    this->m_tcp_client_pool->releaseClient(client);
+                    client->resetNew();
                 });
             });
         });
-        io_thread->start();
     }
 
     void RPCServer::registerToCenter() {

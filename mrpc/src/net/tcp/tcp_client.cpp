@@ -47,14 +47,12 @@ namespace mrpc {
         }
     }
 
-    void TCPClient::clear() {
+    void TCPClient::resetNew() {
         if (m_client_fd > 0) {
             m_fd_event->cancel_listen(FDEvent::IN_EVENT);
             m_fd_event->cancel_listen(FDEvent::OUT_EVENT);
             m_event_loop->deleteEpollEvent(m_fd_event);
-            m_connection->cleardones();
-            m_connection->clearbuffer();
-            m_connection->listenRead();
+            m_connection->resetNew();
         }
     }
 

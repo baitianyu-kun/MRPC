@@ -10,6 +10,7 @@
 #include <google/protobuf/message.h>
 #include "net/tcp/tcp_server.h"
 #include "net/tcp/tcp_client.h"
+#include "net/tcp/tcp_connection_pool.h"
 
 #define HEART_TIMER_EVENT_INTERVAL Config::GetGlobalConfig()->m_heart_pack_interval
 
@@ -51,6 +52,9 @@ namespace mrpc {
         std::vector<std::string> getAllServiceNames();
 
         std::string getAllServiceNamesStr();
+
+    private:
+        TCPClientPool::ptr m_tcp_client_pool;
     };
 }
 

@@ -91,6 +91,12 @@ namespace mrpc {
         adjustBuffer();
     }
 
+    void TCPVectorBuffer::clearBuffer() {
+        m_read_index = 0;
+        m_write_index = 0;
+        m_buffer.clear();
+    }
+
 }
 
 

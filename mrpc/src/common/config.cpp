@@ -87,7 +87,7 @@ namespace mrpc {
         READ_STR_FROM_XML_NODE(rpc_server_listen_port, rpc_server_node);
         READ_STR_FROM_XML_NODE(server_peer_register_ip, rpc_server_node);
         READ_STR_FROM_XML_NODE(server_peer_register_port, rpc_server_node);
-        m_heart_pack_interval = std::stoi(heart_pack_interval_str);
+        m_heart_pack_interval = std::stod(heart_pack_interval_str);
         m_rpc_server_listen_ip = rpc_server_listen_ip_str;
         m_rpc_server_listen_port = std::stoi(rpc_server_listen_port_str);
         m_server_peer_register_ip = server_peer_register_ip_str;

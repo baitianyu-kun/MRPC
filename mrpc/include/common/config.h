@@ -53,7 +53,7 @@ namespace mrpc {
         int m_register_listen_port{0};
 
         // rpc_server
-        int m_heart_pack_interval{0}; // 发送heart pack的延时
+        double m_heart_pack_interval{0}; // 发送heart pack的延时
         std::string m_rpc_server_listen_ip;
         int m_rpc_server_listen_port{0};
         std::string m_server_peer_register_ip;

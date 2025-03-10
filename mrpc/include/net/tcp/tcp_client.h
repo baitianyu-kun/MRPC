@@ -31,7 +31,7 @@ namespace mrpc {
 
         void onConnectionError();
 
-        void clear();
+        void resetNew();
 
         TCPConnection::ptr &getConnectionRef() { return m_connection; };
 

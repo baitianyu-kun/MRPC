@@ -20,11 +20,11 @@ namespace mrpc {
               m_max_size(max_size),
               m_max_idle_time(max_idle_time),
               m_protocol_type(protocol_type) {
-        m_io_thread_pool = std::make_unique<IOThreadPool>(2);
+        m_io_thread_pool = std::make_unique<IOThreadPool>(TCP_CONNECTION_POOL_IO_THREAD_POOL_SIZE);
         m_io_thread_pool->start();
         // 初始化最小连接数
         for (uint32_t i = 0; i < m_min_size; ++i) {
-            createConnection();
+            createConnectionSync();
         }
         INFOLOG("Initialize client pool with %d connections", m_idle_clients.size());
     }
@@ -95,14 +95,15 @@ namespace mrpc {
         }
     }
 
-    void TCPClientPool::createConnection() {
+    void TCPClientPool::createConnectionSync() {
         auto client = std::make_shared<TCPClient>(m_peer_addr,
                                                   m_io_thread_pool->getIOThread()->getEventLoop(),
                                                   m_protocol_type);
-        bool isconnected = false;
-        client->connect([&isconnected]() { isconnected = true; }, true);
-        while (!isconnected) {}
-        if (isconnected) {
+        // 初始创建连接池时采用阻塞式连接
+        bool is_connected = false;
+        client->connect([&is_connected]() { is_connected = true; }, true);
+        while (!is_connected) {}
+        if (is_connected) {
             m_idle_clients.emplace(client);
         }
     }
