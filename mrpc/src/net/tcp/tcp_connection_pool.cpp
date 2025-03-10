@@ -20,11 +20,6 @@ namespace mrpc {
               m_max_size(max_size),
               m_max_idle_time(max_idle_time),
               m_protocol_type(protocol_type) {
-        // 定时清理无用连接
-        Timestamp timestamp(addTime(Timestamp::now(), 5));
-        auto new_timer_id = m_event_loop->addTimerEvent(std::bind(&TCPClientPool::checkIdleClients, this), timestamp,
-                                                        5);
-
         m_io_thread_pool = std::make_unique<IOThreadPool>(TCP_CONNECTION_POOL_IO_THREAD_POOL_SIZE);
         m_io_thread_pool->start();
         // 初始化最小连接数
