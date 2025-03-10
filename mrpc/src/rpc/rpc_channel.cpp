@@ -157,10 +157,14 @@ namespace mrpc {
                                                                                        local_ip.c_str(),
                                                                                        server_addr->toString().c_str());
                                                                                // 为该服务器创建连接池
+                                                                               channel->m_tcp_client_pool.reset();
                                                                                channel->m_tcp_client_pool = std::make_unique<TCPClientPool>(
                                                                                        server_addr,
                                                                                        EventLoop::GetCurrentEventLoop(),
-                                                                                       channel->m_protocol_type
+                                                                                       channel->m_protocol_type,
+                                                                                       Config::GetGlobalConfig()->m_channel_tcp_pool_min_size,
+                                                                                       Config::GetGlobalConfig()->m_channel_tcp_pool_max_size,
+                                                                                       Config::GetGlobalConfig()->m_channel_tcp_pool_idle_time
                                                                                );
                                                                                INFOLOG("%s | get server cache from register center, server list [%s]",
                                                                                        rsp->m_msg_id.c_str(),

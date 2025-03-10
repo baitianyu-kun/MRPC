@@ -46,6 +46,10 @@ namespace mrpc {
         // channel
         std::string m_channel_peer_register_ip;
         int m_channel_peer_register_port;
+        int m_channel_tcp_pool_io_thread_pool_size;
+        int m_channel_tcp_pool_min_size;
+        int m_channel_tcp_pool_max_size;
+        int m_channel_tcp_pool_idle_time;
 
         // register center
         int m_server_time_out{0}; // 服务器超时时间
@@ -58,6 +62,10 @@ namespace mrpc {
         int m_rpc_server_listen_port{0};
         std::string m_server_peer_register_ip;
         int m_server_peer_register_port{0};
+        int m_server_tcp_pool_io_thread_pool_size;
+        int m_server_tcp_pool_min_size;
+        int m_server_tcp_pool_max_size;
+        int m_server_tcp_pool_idle_time;
 
         // path
         std::string m_rpc_method_path;

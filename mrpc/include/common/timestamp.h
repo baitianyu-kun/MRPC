@@ -9,7 +9,7 @@
 #include <string>
 #include <sys/time.h>
 
-namespace mrpc{
+namespace mrpc {
     class Timestamp {
     public:
         Timestamp() : microSecondsSinceEpoch_(0) {
@@ -58,6 +58,10 @@ namespace mrpc{
 
     inline bool operator==(Timestamp lhs, Timestamp rhs) {
         return lhs.microSecondsSinceEpoch() == rhs.microSecondsSinceEpoch();
+    }
+
+    inline time_t operator-(Timestamp lhs, Timestamp rhs) {
+        return lhs.secondsSinceEpoch() - rhs.secondsSinceEpoch();
     }
 
 // 如果是重复定时任务就会对此时间戳进行增加。

@@ -17,7 +17,10 @@ namespace mrpc {
         m_tcp_client_pool = std::make_unique<TCPClientPool>(
                 m_register_addr,
                 EventLoop::GetCurrentEventLoop(),
-                m_protocol_type
+                m_protocol_type,
+                Config::GetGlobalConfig()->m_server_tcp_pool_min_size,
+                Config::GetGlobalConfig()->m_server_tcp_pool_max_size,
+                Config::GetGlobalConfig()->m_server_tcp_pool_idle_time
         );
         initServlet();
     }
@@ -153,8 +156,6 @@ namespace mrpc {
         body["method_full_name"] = method_full_name;
         body["pb_data"] = res_pb_data;
         body["msg_id"] = request->m_msg_id;
-
-        DEBUGLOG("===== RES MSG ID %s =====", request->m_msg_id.c_str());
 
         if (m_protocol_type == ProtocolType::HTTP_Protocol) {
             HTTPManager::createResponse(std::static_pointer_cast<HTTPResponse>(response), MSGType::RPC_METHOD_RESPONSE,

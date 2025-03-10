@@ -87,19 +87,35 @@ namespace mrpc {
         READ_STR_FROM_XML_NODE(rpc_server_listen_port, rpc_server_node);
         READ_STR_FROM_XML_NODE(server_peer_register_ip, rpc_server_node);
         READ_STR_FROM_XML_NODE(server_peer_register_port, rpc_server_node);
+        READ_STR_FROM_XML_NODE(server_tcp_pool_io_thread_pool_size, rpc_server_node);
+        READ_STR_FROM_XML_NODE(server_tcp_pool_min_size, rpc_server_node);
+        READ_STR_FROM_XML_NODE(server_tcp_pool_max_size, rpc_server_node);
+        READ_STR_FROM_XML_NODE(server_tcp_pool_idle_time, rpc_server_node);
         m_heart_pack_interval = std::stod(heart_pack_interval_str);
         m_rpc_server_listen_ip = rpc_server_listen_ip_str;
         m_rpc_server_listen_port = std::stoi(rpc_server_listen_port_str);
         m_server_peer_register_ip = server_peer_register_ip_str;
         m_server_peer_register_port = std::stoi(server_peer_register_port_str);
+        m_server_tcp_pool_io_thread_pool_size = std::stoi(server_tcp_pool_io_thread_pool_size_str);
+        m_server_tcp_pool_min_size = std::stoi(server_tcp_pool_min_size_str);
+        m_server_tcp_pool_max_size = std::stoi(server_tcp_pool_max_size_str);
+        m_server_tcp_pool_idle_time = std::stoi(server_tcp_pool_idle_time_str);
     }
 
     void Config::initChannel() {
         READ_XML_NODE(channel, root_node);
         READ_STR_FROM_XML_NODE(channel_peer_register_ip, channel_node);
         READ_STR_FROM_XML_NODE(channel_peer_register_port, channel_node);
+        READ_STR_FROM_XML_NODE(channel_tcp_pool_io_thread_pool_size, channel_node);
+        READ_STR_FROM_XML_NODE(channel_tcp_pool_min_size, channel_node);
+        READ_STR_FROM_XML_NODE(channel_tcp_pool_max_size, channel_node);
+        READ_STR_FROM_XML_NODE(channel_tcp_pool_idle_time, channel_node);
         m_channel_peer_register_ip = channel_peer_register_ip_str;
         m_channel_peer_register_port = std::stoi(channel_peer_register_port_str);
+        m_channel_tcp_pool_io_thread_pool_size = std::stoi(channel_tcp_pool_io_thread_pool_size_str);
+        m_channel_tcp_pool_min_size = std::stoi(channel_tcp_pool_min_size_str);
+        m_channel_tcp_pool_max_size = std::stoi(channel_tcp_pool_max_size_str);
+        m_channel_tcp_pool_idle_time = std::stoi(channel_tcp_pool_idle_time_str);
     }
 
     void Config::initRegister() {

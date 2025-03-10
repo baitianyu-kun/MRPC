@@ -20,6 +20,11 @@ namespace mrpc {
               m_max_size(max_size),
               m_max_idle_time(max_idle_time),
               m_protocol_type(protocol_type) {
+        // 定时清理无用连接
+        Timestamp timestamp(addTime(Timestamp::now(), 5));
+        auto new_timer_id = m_event_loop->addTimerEvent(std::bind(&TCPClientPool::checkIdleClients, this), timestamp,
+                                                        5);
+
         m_io_thread_pool = std::make_unique<IOThreadPool>(TCP_CONNECTION_POOL_IO_THREAD_POOL_SIZE);
         m_io_thread_pool->start();
         // 初始化最小连接数
@@ -48,8 +53,6 @@ namespace mrpc {
             // 检查连接是否有效，有效去调用回调函数，即从外面传入的回调函数SendRequest, RecvResponse
             if (pooled_client.m_client->getState() == Connected) {
                 m_active_clients.emplace(pooled_client.m_client);
-                DEBUGLOG("==== NOT EMPTY ====== %d ==== %d ========", m_idle_clients.size(),
-                         m_active_clients.size())
                 callback(pooled_client.m_client);
                 return;
             }
@@ -57,7 +60,6 @@ namespace mrpc {
         // 如果没有可用的空闲连接，且未达到最大连接数，则创建新连接，加入到活跃set中
         if (m_active_clients.size() < m_max_size) {
             createConnectionAsync([this, callback](TCPClient::ptr client) {
-                DEBUGLOG("==== EMPTY ======")
                 std::unique_lock<std::mutex> lock(m_mutex);
                 m_active_clients.emplace(client);
                 callback(client);
@@ -75,7 +77,6 @@ namespace mrpc {
                                                   m_protocol_type);
         // 连接成功后将自己加入到空闲队列中
         client->connect([client, callback]() {
-            DEBUGLOG("==== createConnectionAsync =====")
             callback(client);
         }, true);
     }
@@ -89,7 +90,6 @@ namespace mrpc {
             m_active_clients.erase(it);
             // 如果连接仍然有效，则放回空闲队列，否则自动销毁
             if (client->getState() == Connected) {
-                DEBUGLOG("==== releaseClient =====")
                 m_idle_clients.emplace(client);
             }
         }
@@ -105,6 +105,30 @@ namespace mrpc {
         while (!is_connected) {}
         if (is_connected) {
             m_idle_clients.emplace(client);
+        }
+    }
+
+    void TCPClientPool::checkIdleClients() {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        auto now = Timestamp::now();
+        std::queue<PooledClient> temp_queue;
+        // 检查所有空闲连接有无掉线和超时
+        while (!m_idle_clients.empty()) {
+            auto pooled_client = m_idle_clients.front();
+            m_idle_clients.pop();
+            if ((now - pooled_client.last_used > m_max_idle_time) > m_max_idle_time ||
+                pooled_client.m_client->getState() != Connected) {
+                continue;
+            }
+            temp_queue.emplace(pooled_client);
+        }
+        // 保留有效连接
+        m_idle_clients = std::move(temp_queue);
+        // 维持最小连接数
+        while ((m_idle_clients.size() + m_active_clients.size()) < m_min_size) {
+            createConnectionAsync([this](TCPClient::ptr client) {
+                m_active_clients.emplace(client);
+            });
         }
     }
 }

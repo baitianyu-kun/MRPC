@@ -42,15 +42,17 @@ namespace mrpc {
         // 同步创建connection
         void createConnectionSync();
 
+        void checkIdleClients();
+
 
     private:
         struct PooledClient {
             using ptr = std::shared_ptr<PooledClient>;
             TCPClient::ptr m_client;
-            time_t last_used;  // 最后使用时间
+            Timestamp last_used;  // 最后使用时间
             // Return the current time and put it in *TIMER if TIMER is not NULL.
             explicit PooledClient(TCPClient::ptr client)
-                    : m_client(client), last_used(time(nullptr)) {}
+                    : m_client(client), last_used(Timestamp::now()) {}
         };
 
     private:

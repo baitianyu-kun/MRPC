@@ -17,6 +17,10 @@
     <channel>
         <channel_peer_register_ip>127.0.0.1</channel_peer_register_ip>
         <channel_peer_register_port>22225</channel_peer_register_port>
+        <channel_tcp_pool_io_thread_pool_size>4</channel_tcp_pool_io_thread_pool_size>
+        <channel_tcp_pool_min_size>20</channel_tcp_pool_min_size>
+        <channel_tcp_pool_max_size>50</channel_tcp_pool_max_size>
+        <channel_tcp_pool_idle_time>60</channel_tcp_pool_idle_time>
     </channel>
 
     <server>
@@ -48,6 +52,10 @@
         <rpc_server_listen_port>22229</rpc_server_listen_port>
         <server_peer_register_ip>127.0.0.1</server_peer_register_ip>
         <server_peer_register_port>22225</server_peer_register_port>
+        <server_tcp_pool_io_thread_pool_size>4</server_tcp_pool_io_thread_pool_size>
+        <server_tcp_pool_min_size>20</server_tcp_pool_min_size>
+        <server_tcp_pool_max_size>50</server_tcp_pool_max_size>
+        <server_tcp_pool_idle_time>60</server_tcp_pool_idle_time>
     </rpc_server>
 
 </root>
