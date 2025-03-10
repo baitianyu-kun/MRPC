@@ -13,21 +13,27 @@ namespace mrpc {
 
     class TCPClient {
     public:
+        friend class TCPConnection;
         using ptr = std::shared_ptr<TCPClient>;
 
         // 默认获取当前线程的eventloop
         // 也可以指定获取哪个线程的eventloop
-        TCPClient(NetAddr::ptr peer_addr, EventLoop::ptr specific_eventloop = EventLoop::GetCurrentEventLoop(), ProtocolType protocol_type = ProtocolType::HTTP_Protocol);
+        TCPClient(NetAddr::ptr peer_addr, EventLoop::ptr specific_eventloop = EventLoop::GetCurrentEventLoop(),
+                  ProtocolType protocol_type = ProtocolType::HTTP_Protocol);
 
         ~TCPClient();
 
-        void connect(std::function<void()> done);
+        void connect(std::function<void()> done, bool other = false);
 
         void sendRequest(const Protocol::ptr &request, const std::function<void(Protocol::ptr)> &done);
 
         void recvResponse(const std::string &msg_id, const std::function<void(Protocol::ptr)> &done);
 
         void onConnectionError();
+
+        void clear();
+
+        TCPConnection::ptr &getConnectionRef() { return m_connection; };
 
         NetAddr::ptr getPeerAddr();
 
@@ -46,6 +52,10 @@ namespace mrpc {
         EventLoop::ptr getEventLoop();
 
         bool setSocketOption(int level, int option, void *result, size_t len);
+
+        TCPState getState();
+
+        void setState(TCPState new_state);
 
         template<class T>
         bool setSocketOption(int level, int option, T *result) {

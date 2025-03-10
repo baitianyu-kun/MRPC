@@ -85,7 +85,12 @@ namespace mrpc {
         // 读取完成后不需要取消监听，否则无法判断什么时候ret == 0，即判断关闭
         if (is_close) {
             INFOLOG("peer closed, peer addr [%s], clientfd [%d]", m_peer_addr->toString().c_str(), m_client_fd);
-            clear(); // 取消各种读写监听以及删除当前的m_fd_event
+
+            m_in_buffer.reset();
+            m_in_buffer = std::make_shared<TCPVectorBuffer>(2048);
+
+            if (m_connection_type == TCPConnectionByServer)
+                clear();
             return;
         }
         if (!is_read_and_write_all) {
@@ -135,8 +140,9 @@ namespace mrpc {
             // 本端调用shutdown关闭读，本端的套接字上将触发EPOLLIN+EPOLLRDHUP事件，所以客户端shutdown写，发送FIN，则服务端触发EpollIN和onRead，读取为0，被动关闭。
             // 对端shutdown读写，本端的套接字上触发EPOLLIN+EPOLLRDHUP事件
             // 本端shutdown读写，本端的套接字上触发EPOLLIN+EPOLLHUP+EPOLLRDHUP事件
-            ::shutdown(m_client_fd, SHUT_WR);
-            m_state = HalfClosing;
+//            ::shutdown(m_client_fd, SHUT_WR);
+//            m_state = HalfClosing;
+//            m_write_dones.clear();
         }
     }
 
@@ -144,7 +150,8 @@ namespace mrpc {
         if (m_state != Connected) {
             ERRORLOG("onWrite error, client has already disconnected, addr [%s], clientfd [%d]",
                      m_peer_addr->toString().c_str(), m_client_fd);
-            clear();
+            if (m_connection_type == TCPConnectionByServer)
+                clear();
             if (m_connection_type == TCPConnectionByClient) {
                 m_client_error_done(); // 作为客户端，就直接停止执行eventloop，断开client与server的连接
             }
@@ -178,7 +185,8 @@ namespace mrpc {
                 ERRORLOG("write data error, errno EAEAGAIN and rt -1, may be send buffer is full");
                 break;
             } else {
-                clear();
+                if (m_connection_type == TCPConnectionByServer)
+                    clear();
                 if (m_connection_type == TCPConnectionByClient) {
                     m_client_error_done(); // 作为客户端，就直接停止执行eventloop，断开client与server的连接
                 }
@@ -187,6 +195,10 @@ namespace mrpc {
         if (is_read_and_write_all) {
             m_fd_event->cancel_listen(FDEvent::OUT_EVENT);
             m_event_loop->addEpollEvent(m_fd_event);
+
+            m_out_buffer.reset();
+            m_out_buffer = std::make_shared<TCPVectorBuffer>(2048);
+
         }
         if (m_connection_type == TCPConnectionByClient) {
             for (const auto &write_done: m_write_dones) {

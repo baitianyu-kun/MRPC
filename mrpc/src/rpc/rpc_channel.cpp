@@ -148,6 +148,20 @@ namespace mrpc {
                                                                                auto server_list_str = rsp->m_body_data_map["server_list"];
                                                                                channel->updateCache(service_name,
                                                                                                     server_list_str);
+                                                                               // 获取本地ip地址，根据该ip地址去进行hash选择
+                                                                               auto local_ip = getLocalIP();
+                                                                               auto server_addr = channel->m_service_balance[service_name]->getServer(
+                                                                                       local_ip);
+                                                                               DEBUGLOG(
+                                                                                       "local ip [%s], choosing server [%s]",
+                                                                                       local_ip.c_str(),
+                                                                                       server_addr->toString().c_str());
+                                                                               // 为该服务器创建连接池
+                                                                               channel->m_tcp_client_pool = std::make_unique<TCPClientPool>(
+                                                                                       server_addr,
+                                                                                       EventLoop::GetCurrentEventLoop(),
+                                                                                       channel->m_protocol_type
+                                                                               );
                                                                                INFOLOG("%s | get server cache from register center, server list [%s]",
                                                                                        rsp->m_msg_id.c_str(),
                                                                                        channel->getAllServerList().c_str());
@@ -178,11 +192,6 @@ namespace mrpc {
         if (m_service_servers_cache.empty()) {
             serviceDiscovery(method->service()->full_name());
         }
-        // 获取本地ip地址，根据该ip地址去进行hash选择
-        auto local_ip = getLocalIP();
-        auto server_addr = m_service_balance[method->service()->full_name()]->getServer(local_ip);
-        DEBUGLOG("local ip [%s], choosing server [%s]", local_ip.c_str(), server_addr->toString().c_str());
-        auto client = std::make_shared<TCPClient>(server_addr, EventLoop::GetCurrentEventLoop(), m_protocol_type);
 
         auto rpc_controller = dynamic_cast<RPCController *>(controller);
         if (rpc_controller == nullptr) {
@@ -211,11 +220,11 @@ namespace mrpc {
         INFOLOG("%s | call method name [%s]", request_protocol->m_msg_id.c_str(), method_full_name.c_str());
 
         auto this_channel = shared_from_this();
-        client->connect([this_channel, request_protocol, &client]() {
-            // 发送请求
-            client->sendRequest(request_protocol, [this_channel, request_protocol, &client](Protocol::ptr req) {
+
+        m_tcp_client_pool->getConnectionAsync([request_protocol, this_channel](TCPClient::ptr client) {
+            client->sendRequest(request_protocol, [this_channel, request_protocol, client](Protocol::ptr req) {
                 client->recvResponse(request_protocol->m_msg_id,
-                                     [this_channel, request_protocol, &client](Protocol::ptr rsp) {
+                                     [this_channel, request_protocol, client](Protocol::ptr rsp) {
                                          this_channel->getResponse()->ParseFromString(
                                                  rsp->m_body_data_map["pb_data"]);
                                          INFOLOG("%s | success get rpc response, peer addr [%s], local addr[%s], response [%s]",
@@ -226,7 +235,8 @@ namespace mrpc {
                                          if (this_channel->getClosure()) {
                                              this_channel->getClosure()->Run();
                                          }
-                                         client->getEventLoop()->stop();
+                                         this_channel->m_tcp_client_pool->releaseClient(client);
+                                         client->clear();
                                      });
             });
         });

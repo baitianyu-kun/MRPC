@@ -28,7 +28,9 @@ aux_source_directory(${PROJECT_SOURCE_DIR}/mrpc/src/net/balance SRC_NET_BALANCE_
 
 # 本项目的lib
 add_library(mrpc ${SRC_COMMON_LIST} ${SRC_EVENT_LIST} ${SRC_RPC_LIST} ${SRC_NET_LIST} ${SRC_NET_PROTOCOL_LIST}
-        ${SRC_NET_HTTP_LIST} ${SRC_NET_MPB_LIST} ${SRC_NET_TCP_LIST} ${SRC_NET_BALANCE_LIST})
+        ${SRC_NET_HTTP_LIST} ${SRC_NET_MPB_LIST} ${SRC_NET_TCP_LIST} ${SRC_NET_BALANCE_LIST}
+        mrpc/src/net/tcp/tcp_connection_pool.cpp
+        mrpc/include/net/tcp/tcp_connection_pool.h)
 install(TARGETS mrpc DESTINATION ${PATH_LIB})
 
 # 第三方lib

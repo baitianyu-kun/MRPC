@@ -41,7 +41,7 @@ namespace mrpc {
         // 定时清理已经关闭了的客户端连接
         void clearClientTimerFunc();
 
-    private:
+    protected:
         NetAddr::ptr m_local_addr; // 本地监听地址
         TCPAcceptor::ptr m_acceptor;
         EventLoop::ptr m_main_event_loop;

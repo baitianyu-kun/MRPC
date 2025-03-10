@@ -14,6 +14,7 @@
 #include "rpc/rpc_controller.h"
 #include "rpc/rpc_closure.h"
 #include "common/log.h"
+#include "net/tcp/tcp_connection_pool.h"
 
 #define NEW_MESSAGE(type, var_name) \
         std::shared_ptr<type> var_name = std::make_shared<type>(); \
@@ -92,13 +93,15 @@ namespace mrpc {
                 std::shared_ptr<RequestMsgType> request_msg) {
             auto promise = std::make_shared<std::promise<std::shared_ptr<ResponseMsgType>>>();
             auto future = promise->get_future();
-            callRPCAsync<RequestMsgType,ResponseMsgType>(call_method, request_msg, [promise](std::shared_ptr<ResponseMsgType> response_msg) {
-                if (response_msg) {
-                    promise->set_value(response_msg);
-                } else {
-                    promise->set_exception(std::make_exception_ptr(std::runtime_error("error response_msg")));
-                }
-            });
+            callRPCAsync<RequestMsgType, ResponseMsgType>(call_method, request_msg,
+                                                          [promise](std::shared_ptr<ResponseMsgType> response_msg) {
+                                                              if (response_msg) {
+                                                                  promise->set_value(response_msg);
+                                                              } else {
+                                                                  promise->set_exception(std::make_exception_ptr(
+                                                                          std::runtime_error("error response_msg")));
+                                                              }
+                                                          });
             return future;
         }
 
@@ -133,6 +136,9 @@ namespace mrpc {
 
     private:
         PublishListener::ptr m_publish_listener;
+
+    private:
+        TCPClientPool::ptr m_tcp_client_pool;
     };
 }
 

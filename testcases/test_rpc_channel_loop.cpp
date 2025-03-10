@@ -46,7 +46,7 @@ int main() {
     controller->SetTimeout(2000); // 设置超时时间
     channel->init(controller, request_msg, response_msg, closure);
 
-    channel->subscribe("Order"); // 向注册中心订阅这个服务
+//    channel->subscribe("Order"); // 向注册中心订阅这个服务
 
     Order_Stub stub(channel.get());
     while (1) {

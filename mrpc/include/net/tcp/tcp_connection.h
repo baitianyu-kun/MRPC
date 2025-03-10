@@ -77,6 +77,18 @@ namespace mrpc {
 
         NetAddr::ptr getPeerAddr();
 
+        void cleardones() {
+            m_read_dones.clear();
+            m_write_dones.clear();
+        }
+
+        void clearbuffer() {
+            m_in_buffer.reset();
+            m_out_buffer.reset();
+            m_in_buffer = std::make_shared<TCPVectorBuffer>(2048);
+            m_out_buffer = std::make_shared<TCPVectorBuffer>(2048);
+        }
+
     private:
         EventLoop::ptr m_event_loop;
         NetAddr::ptr m_local_addr;

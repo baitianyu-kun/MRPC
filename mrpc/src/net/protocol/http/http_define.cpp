@@ -151,6 +151,7 @@ namespace mrpc {
 
     void HTTPManager::createMethodRequest(HTTPRequest::ptr request, body_type &body) {
         request->m_msg_id = MSGIDUtil::GenerateMSGID();
+        DEBUGLOG("==== 1111 send request msg id %s =====",request->m_msg_id.c_str());
         std::string body_str = "method_full_name:" + body["method_full_name"] + g_CRLF
                                + "pb_data:" + body["pb_data"] + g_CRLF
                                + "msg_id:" + request->m_msg_id;

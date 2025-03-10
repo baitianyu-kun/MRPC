@@ -10,7 +10,7 @@ namespace mrpc {
     RPCServer::RPCServer(NetAddr::ptr local_addr, NetAddr::ptr register_addr, ProtocolType protocol_type)
             : TCPServer(local_addr, protocol_type),
               m_local_addr(local_addr),
-              m_register_addr(register_addr){
+              m_register_addr(register_addr) {
         Timestamp timestamp(addTime(Timestamp::now(), HEART_TIMER_EVENT_INTERVAL));
         auto new_timer_id = getMainEventLoop()->addTimerEvent(std::bind(&RPCServer::heartToCenter, this), timestamp,
                                                               HEART_TIMER_EVENT_INTERVAL);
@@ -151,10 +151,14 @@ namespace mrpc {
         body["pb_data"] = res_pb_data;
         body["msg_id"] = request->m_msg_id;
 
+        DEBUGLOG("===== RES MSG ID %s =====", request->m_msg_id.c_str());
+
         if (m_protocol_type == ProtocolType::HTTP_Protocol) {
-            HTTPManager::createResponse(std::static_pointer_cast<HTTPResponse>(response),MSGType::RPC_METHOD_RESPONSE,body);
+            HTTPManager::createResponse(std::static_pointer_cast<HTTPResponse>(response), MSGType::RPC_METHOD_RESPONSE,
+                                        body);
         } else {
-            MPbManager::createResponse(std::static_pointer_cast<MPbProtocol>(response),MSGType::RPC_METHOD_RESPONSE,body);
+            MPbManager::createResponse(std::static_pointer_cast<MPbProtocol>(response), MSGType::RPC_METHOD_RESPONSE,
+                                       body);
         }
 
         INFOLOG("%s | http dispatch success, request [%s], response [%s]",

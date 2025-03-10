@@ -47,7 +47,18 @@ namespace mrpc {
         }
     }
 
-    void TCPClient::connect(std::function<void()> done) {
+    void TCPClient::clear() {
+        if (m_client_fd > 0) {
+            m_fd_event->cancel_listen(FDEvent::IN_EVENT);
+            m_fd_event->cancel_listen(FDEvent::OUT_EVENT);
+            m_event_loop->deleteEpollEvent(m_fd_event);
+            m_connection->cleardones();
+            m_connection->clearbuffer();
+            m_connection->listenRead();
+        }
+    }
+
+    void TCPClient::connect(std::function<void()> done,bool other) {
         int ret = ::connect(m_client_fd, m_peer_addr->getSockAddr(), m_peer_addr->getSockAddrLen());
         if (ret == 0) {
             DEBUGLOG("connect [%s] success", m_peer_addr->toString().c_str());
@@ -56,10 +67,19 @@ namespace mrpc {
             if (done) {
                 done();
             }
-            if (m_event_loop->LoopStopFlag()) {
-                m_event_loop->setLoopStopFlag();
+            if (!other){
+                if (m_event_loop->LoopStopFlag()) {
+                    m_event_loop->setLoopStopFlag();
+                }
+                m_event_loop->loop();
             }
-            m_event_loop->loop();
+//            if (m_event_loop->LoopStopFlag()){
+//                DEBUGLOG("==== none1 =====")
+//                m_event_loop->setLoopStopFlag();
+//                m_event_loop->loop();
+//                DEBUGLOG("==== none1 =====")
+//            }
+
         } else if (ret == -1) {
             if (errno == EINPROGRESS) {
                 m_fd_event->listen(FDEvent::OUT_EVENT, [this, done]() {
@@ -88,10 +108,22 @@ namespace mrpc {
                     }
                 });
                 m_event_loop->addEpollEvent(m_fd_event);
-                if (m_event_loop->LoopStopFlag()) {
-                    m_event_loop->setLoopStopFlag();
+//                if (m_event_loop->LoopStopFlag()){
+//                    DEBUGLOG("==== none2 =====")
+//                    m_event_loop->setLoopStopFlag();
+//                    m_event_loop->loop();
+//                    DEBUGLOG("==== none2 =====")
+//                }
+//                if (m_event_loop->LoopStopFlag()) {
+//                    m_event_loop->setLoopStopFlag();
+//                }
+//                m_event_loop->loop();
+                if (!other){
+                    if (m_event_loop->LoopStopFlag()) {
+                        m_event_loop->setLoopStopFlag();
+                    }
+                    m_event_loop->loop();
                 }
-                m_event_loop->loop();
             } else {
                 ERRORLOG("connect error, errno = %d, error = %s", errno, strerror(errno));
                 // 需要返回具体的错误码
@@ -164,5 +196,13 @@ namespace mrpc {
     void TCPClient::onConnectionError() {
         ERRORLOG("connection error, force to close");
         m_event_loop->stop();
+    }
+
+    TCPState TCPClient::getState() {
+        return m_connection->getState();
+    }
+
+    void TCPClient::setState(TCPState new_state) {
+        m_connection->setState(new_state);
     }
 }
