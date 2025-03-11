@@ -234,7 +234,7 @@ class UnixDomainSocketAddr : public NetAddr {
     public:
         using ptr = std::shared_ptr<UnixDomainSocketAddr>;
 
-        explicit UnixDomainSocketAddr(const std::string &path); // 构造函数，接受一个文件系统路径作为参数
+        explicit UnixDomainSocketAddr(const std::string &path); // 构造函数, 接受一个文件系统路径作为参数
 
         explicit UnixDomainSocketAddr(sockaddr_un addr);
 
@@ -246,9 +246,9 @@ class UnixDomainSocketAddr : public NetAddr {
 
         std::string toString() override; // 返回地址的字符串表示形式
 
-        std::string getStringIP() override; // Unix Domain Socket 没有 IP 地址，返回m_path
+        std::string getStringIP() override; // Unix Domain Socket 没有 IP 地址, 返回m_path
 
-        std::string getStringPort() override; // Unix Domain Socket 没有端口号，返回空字符串
+        std::string getStringPort() override; // Unix Domain Socket 没有端口号, 返回空字符串
 
         bool checkValid() override;
 
@@ -258,20 +258,92 @@ class UnixDomainSocketAddr : public NetAddr {
     };
 ```
 
-### 3. 服务注册
+### 3. 长连接
+短连接是指客户端每次请求都建立一个新的连接, 请求完成后立即关闭。优点是实现简单, 缺点是每次请求都需进行TCP三次握手和四次挥手, 占用大量系统资源。所以此处实现了TCPConnectionPool, 使用连接时从中取出, 完成后将连接释放到池中。在TCPConnectionPool中同样使用了线程池IOThreadPool, 负责连接池中的所有事件。
+
+取出连接: 从空闲连接池中获取一个可用的连接, 如果空闲池中没有可用连接且当前活跃连接数未达到最大限制, 则创建一个新连接。
+
+释放连接: 首先检查客户端连接是否为空, 如果为空则直接返回; 接着从活跃连接集合中查找该连接, 如果找到则将其从活跃集合中移除, 并检查连接是否仍然有效（即处于“已连接”状态）。如果连接有效, 则将其放回空闲队列以备复用; 如果连接无效, 则连接对象会自动销毁。
+
+为了后续在多个RPCChannel下实现并发, 所以需要进行加锁。短连接版本请回滚到Commit: 1fa2d49
+```C++
+    class TCPClientPool {
+    public:
+        using ptr = std::unique_ptr<TCPClientPool>;
+
+        TCPClientPool(NetAddr::ptr peer_addr,
+                      EventLoop::ptr event_loop,
+                      ProtocolType protocol_type = ProtocolType::HTTP_Protocol,
+                      uint32_t min_size = TCP_CONNECTION_POOL_MIN_SIZE,
+                      uint32_t max_size = TCP_CONNECTION_POOL_MAX_SIZE,
+                      uint32_t max_idle_time = TCP_CONNECTION_POOL_IDLE_TIME  // 最大空闲时间(秒)
+        );
+
+        ~TCPClientPool();
+
+        // 获取一个异步连接, 是TCPClient负责发送和接收消息, 以及处理回调
+        void getConnectionAsync(std::function<void(TCPClient::ptr)> callback);
+
+        // 归还一个连接
+        void releaseClient(TCPClient::ptr client);
+
+        // 异步创建一个新的连接
+        void createConnectionAsync(std::function<void(TCPClient::ptr)> callback);
+
+        // 同步创建connection
+        void createConnectionSync();
+
+    private:
+        struct PooledClient {
+            using ptr = std::shared_ptr<PooledClient>;
+            TCPClient::ptr m_client;
+            Timestamp last_used;  // 最后使用时间
+            explicit PooledClient(TCPClient::ptr client)
+                    : m_client(client), last_used(Timestamp::now()) {}
+        };
+
+    private:
+        NetAddr::ptr m_peer_addr;                    // 服务器地址
+        EventLoop::ptr m_event_loop;                 // 事件循环
+        uint32_t m_min_size;                         // 最小连接数
+        uint32_t m_max_size;                         // 最大连接数
+        uint32_t m_max_idle_time;                    // 最大空闲时间(秒)
+        ProtocolType m_protocol_type;                // 协议类型
+        std::queue<PooledClient> m_idle_clients;   // 空闲连接队列
+        std::set<TCPClient::ptr> m_active_clients; // 活跃连接集合
+        std::mutex m_mutex;                          // 保护连接池的互斥锁
+        std::unique_ptr<IOThreadPool> m_io_thread_pool;
+    };
+}
+```
+具体使用: 客户端向服务端通信以及服务端向注册中心发送心跳包均使用长连接; 客户端在进行服务发现后根据一致性哈希策略选取最合适的服务器创建连接池。
+```C++
+m_tcp_client_pool->getConnectionAsync([request_protocol, this_channel](TCPClient::ptr client) {
+            client->sendRequest(request_protocol, [this_channel, request_protocol, client](Protocol::ptr req) {
+                client->recvResponse(request_protocol->m_msg_id,
+                                     [this_channel, client](Protocol::ptr rsp) {
+                                         .....
+                                         this_channel->m_tcp_client_pool->releaseClient(client); // 使用完成后归还连接
+                                         client->resetNew(); // 重置该连接中的缓冲池, 删除监听事件以便于下次使用
+                                     });
+            });
+        });
+```
+
+### 4. 服务注册
 每台服务器在启动时均会向注册中心注册提供的服务名以及地址端口等, 注册中心维护一个服务名到服务器列表的映射, 同时还需要维护服务器在线状态, 将在心跳检测部分提到:
 ```C++
 // {Order:{Server1, Server2...}}
 std::unordered_map<std::string, std::set<std::string>> m_service_servers; 
 ```
-### 4. 服务发现
+### 5. 服务发现
 由于RPC项目多为分布式项目, 因此需要注册中心来记录所有服务器信息, 客户端通过访问注册中心来获取所有提供该服务的服务器列表。在客户端启动时, 如果本地服务器列表为空, 则向注册中心发出请求。
 ```C++
 if (m_service_servers_cache.empty()) {
     serviceDiscovery(method->service()->full_name());
 }
 ```
-### 5. 负载均衡
+### 6. 负载均衡
 客户端从注册中心获取到服务器列表后, 由负载均衡策略选取最为合适的服务器。常见负载均衡策略有随机、轮询和一致性哈希。在这里采用一致性哈希策略。为防止"雪崩"问题, 引入虚拟节点, 每个虚拟节点都会关联到一个真实节点, 使得整个哈希环上节点均匀分布。
 ```C++
 class ConsistentHash {
@@ -305,7 +377,7 @@ class ConsistentHash {
 auto local_ip = getLocalIP();
 auto server_addr = m_service_balance[method->service()->full_name()]->getServer(local_ip);   
 ```
-### 6. 服务订阅/通知
+### 7. 服务订阅/通知
 当服务器下线或者上线时, 需要及时通知订阅了该服务的客户端更新缓存。  
 比较常见的有推和拉两种模式, 前者是注册中心负责推送, 后者是客户端以一个固定的轮询时间向注册中心拉取更新。在这里采用推拉结合的方式, 当服务器上线或者下线, 注册中心返回一个通知, 客户端收到该通知后重新拉取服务器列表。使用推拉结合的优点就是推的消息较为轻量, 减轻注册中心压力, 同时扩展简单, 无需根据具体业务场景定义推送内容, 支持较多场景。
 ```C++
@@ -319,7 +391,7 @@ void RPCChannel::subscribe(const std::string &service_name) {
                                                                m_protocol_type);
     }
 
-// 注册中心收到订阅信息, 维护一个客户端列表, 用来做推送, key：订阅的服务名, value：客户端地址
+// 注册中心收到订阅信息, 维护一个客户端列表, 用来做推送, key: 订阅的服务名, value: 客户端地址
 std::unordered_map<std::string, std::set<std::string>> m_service_clients;
 
 // 当服务器超时或者重新上线时, 推送消息
@@ -389,7 +461,7 @@ class PublishListenerRunner {
     };
 ```
 
-### 7. 心跳检测
+### 8. 心跳检测
 注册中心需要维护服务器的在线状态, 当出现服务器掉线或者上线, 需要推送给客户端, 使客户端及时更新服务器缓存列表。在服务注册以后, 注册中心为每个服务器设置定时器, 服务器定时向注册中心发送心跳包, 注册中心收到后将重新开始计时, 如果超时没有收到心跳包, 则从缓存中删除该服务器, 并通知已经订阅的客户端。
 ```C++
 // 服务注册后设置定时器
@@ -412,7 +484,7 @@ auto time_out_services = m_servers_service[server_addr_str];
 m_service_servers[service].erase(server_addr_str); 
 notifyClientServiceUnregister(service); // 通知客户端, 该服务器提供的这些服务均已过期
 ```
-### 8. 异步调用方式
+### 9. 异步调用方式
 本项目提供了两种异步调用方式, 一种是通过传入回调函数, 另一种是使用`future`和`promise`封装异步操作(_1代表`std::placeholders::_1`):
 - 使用回调函数
 ```C++
