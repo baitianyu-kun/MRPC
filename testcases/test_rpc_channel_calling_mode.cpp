@@ -33,19 +33,6 @@ int main() {
 
     Order_Stub stub(channel.get());
 
-    channel->callRPCAsync<makeOrderRequest, makeOrderResponse>(
-            std::bind(&Order_Stub::makeOrder, &stub, std::placeholders::_1, std::placeholders::_2,
-                      std::placeholders::_3, std::placeholders::_4),
-            request_msg,
-            [client](std::shared_ptr<makeOrderResponse> response_msg) {
-                if (response_msg->order_id() == "20230514") {
-                    INFOLOG("========= Success Call RPC By Async ==============");
-                }
-                client->getTCPClientPool()->stop();
-            }
-    );
-
-    client->getTCPClientPool()->join();
 
     auto future = channel->callRPCFuture<makeOrderRequest, makeOrderResponse>(
             std::bind(&Order_Stub::makeOrder, &stub, std::placeholders::_1, std::placeholders::_2,
@@ -55,5 +42,39 @@ int main() {
     if (response_msg->order_id() == "20230514") {
         INFOLOG("========= Success Call RPC By Future ==============");
     }
+
+    auto future2 = channel->callRPCFuture<makeOrderRequest, makeOrderResponse>(
+            std::bind(&Order_Stub::makeOrder, &stub, std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, std::placeholders::_4),
+            request_msg);
+    auto response_msg2 = future2.get();
+    if (response_msg2->order_id() == "20230514") {
+        INFOLOG("========= Success Call RPC By Future ==============");
+    }
+
+
+    channel->callRPCAsync<makeOrderRequest, makeOrderResponse>(
+            std::bind(&Order_Stub::makeOrder, &stub,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, std::placeholders::_4),
+            request_msg,
+            [](std::shared_ptr<makeOrderResponse> response_msg) {
+                if (response_msg->order_id() == "20230514") {
+                    INFOLOG("========= Success Call RPC By Async ==============");
+                }
+            }
+    );
+
+    channel->callRPCAsync<makeOrderRequest, makeOrderResponse>(
+            std::bind(&Order_Stub::makeOrder, &stub,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, std::placeholders::_4),
+            request_msg,
+            [](std::shared_ptr<makeOrderResponse> response_msg) {
+                if (response_msg->order_id() == "20230514") {
+                    INFOLOG("========= Success Call RPC By Async ==============");
+                }
+            }
+    );
     return 0;
 }

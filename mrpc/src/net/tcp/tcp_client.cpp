@@ -56,7 +56,7 @@ namespace mrpc {
         }
     }
 
-    void TCPClient::connect(std::function<void()> done,bool other) {
+    void TCPClient::connect(std::function<void()> done, bool is_already_in_loop) {
         int ret = ::connect(m_client_fd, m_peer_addr->getSockAddr(), m_peer_addr->getSockAddrLen());
         if (ret == 0) {
             DEBUGLOG("connect [%s] success", m_peer_addr->toString().c_str());
@@ -65,19 +65,12 @@ namespace mrpc {
             if (done) {
                 done();
             }
-            if (!other){
+            if (!is_already_in_loop) {
                 if (m_event_loop->LoopStopFlag()) {
                     m_event_loop->setLoopStopFlag();
                 }
                 m_event_loop->loop();
             }
-//            if (m_event_loop->LoopStopFlag()){
-//                DEBUGLOG("==== none1 =====")
-//                m_event_loop->setLoopStopFlag();
-//                m_event_loop->loop();
-//                DEBUGLOG("==== none1 =====")
-//            }
-
         } else if (ret == -1) {
             if (errno == EINPROGRESS) {
                 m_fd_event->listen(FDEvent::OUT_EVENT, [this, done]() {
@@ -106,17 +99,7 @@ namespace mrpc {
                     }
                 });
                 m_event_loop->addEpollEvent(m_fd_event);
-//                if (m_event_loop->LoopStopFlag()){
-//                    DEBUGLOG("==== none2 =====")
-//                    m_event_loop->setLoopStopFlag();
-//                    m_event_loop->loop();
-//                    DEBUGLOG("==== none2 =====")
-//                }
-//                if (m_event_loop->LoopStopFlag()) {
-//                    m_event_loop->setLoopStopFlag();
-//                }
-//                m_event_loop->loop();
-                if (!other){
+                if (!is_already_in_loop) {
                     if (m_event_loop->LoopStopFlag()) {
                         m_event_loop->setLoopStopFlag();
                     }

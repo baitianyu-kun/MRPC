@@ -57,6 +57,48 @@ namespace mrpc {
                 std::function<void(RPCController *, RequestMsgType *, ResponseMsgType *, RPCClosure *)> call_method,
                 std::shared_ptr<RequestMsgType> request_msg,
                 std::function<void(std::shared_ptr<ResponseMsgType>)> response_msg_call_back) {
+            bool done = false; // 等待异步操作完成
+            callRPCAsyncIn<RequestMsgType, ResponseMsgType>(call_method, request_msg,
+                                                            [&done, response_msg_call_back](
+                                                                    std::shared_ptr<ResponseMsgType> response_msg) {
+                                                                response_msg_call_back(response_msg);
+                                                                done = true;
+                                                            });
+            while (!done) {}
+        }
+
+        template<typename RequestMsgType, typename ResponseMsgType>
+        std::future<std::shared_ptr<ResponseMsgType>> callRPCFuture(
+                std::function<void(RPCController *, RequestMsgType *, ResponseMsgType *, RPCClosure *)> call_method,
+                std::shared_ptr<RequestMsgType> request_msg) {
+            auto promise = std::make_shared<std::promise<std::shared_ptr<ResponseMsgType>>>();
+            auto future = promise->get_future();
+            callRPCAsyncIn<RequestMsgType, ResponseMsgType>(call_method, request_msg,
+                                                            [promise](std::shared_ptr<ResponseMsgType> response_msg) {
+                                                                if (response_msg) {
+                                                                    promise->set_value(response_msg);
+                                                                } else {
+                                                                    promise->set_exception(std::make_exception_ptr(
+                                                                            std::runtime_error("error response_msg")));
+                                                                }
+                                                            });
+            return future;
+        }
+
+        google::protobuf::RpcController *getController();
+
+        google::protobuf::Message *getRequest();
+
+        google::protobuf::Message *getResponse();
+
+        google::protobuf::Closure *getClosure();
+
+    private:
+        template<typename RequestMsgType, typename ResponseMsgType>
+        void callRPCAsyncIn(
+                std::function<void(RPCController *, RequestMsgType *, ResponseMsgType *, RPCClosure *)> call_method,
+                std::shared_ptr<RequestMsgType> request_msg,
+                std::function<void(std::shared_ptr<ResponseMsgType>)> response_msg_call_back) {
             auto response_msg = std::make_shared<ResponseMsgType>();
             auto controller = std::make_shared<RPCController>();
             auto closure = std::make_shared<RPCClosure>(
@@ -82,32 +124,6 @@ namespace mrpc {
             init(controller, request_msg, response_msg, closure);
             call_method(controller.get(), request_msg.get(), response_msg.get(), closure.get());
         }
-
-        template<typename RequestMsgType, typename ResponseMsgType>
-        std::future<std::shared_ptr<ResponseMsgType>> callRPCFuture(
-                std::function<void(RPCController *, RequestMsgType *, ResponseMsgType *, RPCClosure *)> call_method,
-                std::shared_ptr<RequestMsgType> request_msg) {
-            auto promise = std::make_shared<std::promise<std::shared_ptr<ResponseMsgType>>>();
-            auto future = promise->get_future();
-            callRPCAsync<RequestMsgType, ResponseMsgType>(call_method, request_msg,
-                                                          [promise](std::shared_ptr<ResponseMsgType> response_msg) {
-                                                              if (response_msg) {
-                                                                  promise->set_value(response_msg);
-                                                              } else {
-                                                                  promise->set_exception(std::make_exception_ptr(
-                                                                          std::runtime_error("error response_msg")));
-                                                              }
-                                                          });
-            return future;
-        }
-
-        google::protobuf::RpcController *getController();
-
-        google::protobuf::Message *getRequest();
-
-        google::protobuf::Message *getResponse();
-
-        google::protobuf::Closure *getClosure();
 
     private:
         google_rpc_controller_ptr m_controller{nullptr};

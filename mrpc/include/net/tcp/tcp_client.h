@@ -24,7 +24,7 @@ namespace mrpc {
 
         ~TCPClient();
 
-        void connect(std::function<void()> done, bool other = false);
+        void connect(std::function<void()> done, bool is_already_in_loop = false);
 
         void sendRequest(const Protocol::ptr &request, const std::function<void(Protocol::ptr)> &done);
 

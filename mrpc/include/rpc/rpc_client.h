@@ -28,6 +28,8 @@ namespace mrpc {
 
         ProtocolType getProtocolType() const { return m_protocol_type; }
 
+        void join() { call_io_thread->join(); }
+
     public:
         void subscribe(const std::string &service_name);
 

@@ -59,11 +59,11 @@ add_executable(test_rpc_server3
         testcases/order.pb.h)
 target_link_libraries(test_rpc_server3 ${ALL_LIBS})
 
-#add_executable(test_rpc_channel_calling_mode
-#        ${PROJECT_SOURCE_DIR}/${PATH_TESTCASES}/test_rpc_channel_calling_mode.cpp
-#        testcases/order.pb.cc
-#        testcases/order.pb.h)
-#target_link_libraries(test_rpc_channel_calling_mode ${ALL_LIBS})
+add_executable(test_rpc_channel_calling_mode
+        ${PROJECT_SOURCE_DIR}/${PATH_TESTCASES}/test_rpc_channel_calling_mode.cpp
+        testcases/order.pb.cc
+        testcases/order.pb.h)
+target_link_libraries(test_rpc_channel_calling_mode ${ALL_LIBS})
 
 add_executable(test_rpc_channel_loop
         ${PROJECT_SOURCE_DIR}/${PATH_TESTCASES}/test_rpc_channel_loop.cpp

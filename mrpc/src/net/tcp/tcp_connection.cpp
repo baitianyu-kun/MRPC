@@ -86,8 +86,7 @@ namespace mrpc {
         if (is_close) {
             INFOLOG("peer closed, peer addr [%s], clientfd [%d]", m_peer_addr->toString().c_str(), m_client_fd);
             m_in_buffer->clearBuffer(); // 被动关闭后清空缓冲区
-            if (m_connection_type == TCPConnectionByServer)
-                clear();
+            clear();
             return;
         }
         if (!is_read_and_write_all) {
