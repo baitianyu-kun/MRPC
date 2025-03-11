@@ -22,11 +22,11 @@ namespace mrpc {
 
         std::string getAllServerList();
 
+        TCPClient::ptr getClient() { return m_server_client; }
+
         size_t getCacheSize() const { return m_service_servers_cache.size(); }
 
         ProtocolType getProtocolType() const { return m_protocol_type; }
-
-        TCPClientPool::ptr getTCPClientPool() { return m_tcp_client_pool; }
 
     public:
         void subscribe(const std::string &service_name);
@@ -40,13 +40,15 @@ namespace mrpc {
         PublishListener::ptr m_publish_listener;
 
     private:
-        TCPClientPool::ptr m_tcp_client_pool;
+        TCPClient::ptr m_server_client;
+        std::unique_ptr<IOThread> call_io_thread;
 
     private:
         std::unordered_map<std::string, std::set<std::string>> m_service_servers_cache; // service对应的多少个server
         std::unordered_map<std::string, ConsistentHash::ptr> m_service_balance; // 一个service对应一个balance
         NetAddr::ptr m_register_center_addr;
         ProtocolType m_protocol_type;
+
     };
 }
 

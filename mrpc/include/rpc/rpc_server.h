@@ -25,7 +25,8 @@ namespace mrpc {
     public:
         using ptr = std::unique_ptr<RPCServer>;
 
-        RPCServer(NetAddr::ptr local_addr, NetAddr::ptr register_addr, ProtocolType protocol_type = ProtocolType::HTTP_Protocol);
+        RPCServer(NetAddr::ptr local_addr, NetAddr::ptr register_addr,
+                  ProtocolType protocol_type = ProtocolType::HTTP_Protocol);
 
         ~RPCServer();
 
@@ -54,7 +55,8 @@ namespace mrpc {
         std::string getAllServiceNamesStr();
 
     private:
-        TCPClientPool::ptr m_tcp_client_pool;
+        TCPClient::ptr m_register_client;
+        std::unique_ptr<IOThread> m_call_register_io_thread;
     };
 }
 

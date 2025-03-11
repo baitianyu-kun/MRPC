@@ -5,7 +5,7 @@
 #include "common/util.h"
 #include "common/string_util.h"
 
-namespace mrpc{
+namespace mrpc {
 
     RPCClient::RPCClient() {
         m_register_center_addr = std::make_shared<mrpc::IPNetAddr>(
@@ -16,6 +16,8 @@ namespace mrpc{
         } else {
             m_protocol_type = ProtocolType::HTTP_Protocol;
         }
+        call_io_thread = std::make_unique<IOThread>();
+        call_io_thread->start();
     }
 
     RPCClient::~RPCClient() {
@@ -26,7 +28,7 @@ namespace mrpc{
         auto io_thread = std::make_unique<IOThread>();
         auto register_client = std::make_shared<TCPClient>(m_register_center_addr, io_thread->getEventLoop(),
                                                            m_protocol_type);
-        auto client = shared_from_this();
+        auto rpc_client = shared_from_this();
         body_type body;
         body["service_name"] = service_name;
         Protocol::ptr request = nullptr;
@@ -39,37 +41,37 @@ namespace mrpc{
             MPbManager::createRequest(std::static_pointer_cast<MPbProtocol>(request),
                                       MSGType::RPC_CLIENT_REGISTER_DISCOVERY_REQUEST, body);
         }
-        register_client->connect([&register_client, request, client, service_name]() {
+        register_client->connect([&register_client, request, rpc_client, service_name]() {
             register_client->sendRequest(request,
-                                         [&register_client, request, client, service_name](Protocol::ptr req) {
+                                         [&register_client, request, rpc_client, service_name](Protocol::ptr req) {
                                              register_client->recvResponse(request->m_msg_id,
-                                                                           [&register_client, request, client, service_name](
+                                                                           [&register_client, request, rpc_client, service_name](
                                                                                    Protocol::ptr rsp) {
                                                                                // 更新本地缓存
                                                                                auto server_list_str = rsp->m_body_data_map["server_list"];
-                                                                               client->updateCache(service_name,
-                                                                                                    server_list_str);
+                                                                               rpc_client->updateCache(service_name,
+                                                                                                       server_list_str);
                                                                                // 获取本地ip地址，根据该ip地址去进行hash选择
                                                                                auto local_ip = getLocalIP();
-                                                                               auto server_addr = client->m_service_balance[service_name]->getServer(
+                                                                               auto server_addr = rpc_client->m_service_balance[service_name]->getServer(
                                                                                        local_ip);
                                                                                DEBUGLOG(
                                                                                        "local ip [%s], choosing server [%s]",
                                                                                        local_ip.c_str(),
                                                                                        server_addr->toString().c_str());
-                                                                               // 为该服务器创建连接池
-                                                                               client->m_tcp_client_pool.reset();
-                                                                               client->m_tcp_client_pool = std::make_shared<TCPClientPool>(
+                                                                               // 为服务器创建连接，以后的请求都使用这里的连接
+                                                                               rpc_client->m_server_client = std::make_shared<TCPClient>(
                                                                                        server_addr,
-                                                                                       EventLoop::GetCurrentEventLoop(),
-                                                                                       client->m_protocol_type,
-                                                                                       Config::GetGlobalConfig()->m_channel_tcp_pool_min_size,
-                                                                                       Config::GetGlobalConfig()->m_channel_tcp_pool_max_size,
-                                                                                       Config::GetGlobalConfig()->m_channel_tcp_pool_idle_time
-                                                                               );
+                                                                                       rpc_client->call_io_thread->getEventLoop(),
+                                                                                       rpc_client->m_protocol_type);
+                                                                               bool is_connected = false;
+                                                                               rpc_client->m_server_client->connect(
+                                                                                       [&is_connected]() { is_connected = true; },
+                                                                                       true);
+                                                                               while (!is_connected) {}
                                                                                INFOLOG("%s | get server cache from register center, server list [%s]",
                                                                                        rsp->m_msg_id.c_str(),
-                                                                                       client->getAllServerList().c_str());
+                                                                                       rpc_client->getAllServerList().c_str());
                                                                                register_client->getEventLoop()->stop();
                                                                            });
                                          });

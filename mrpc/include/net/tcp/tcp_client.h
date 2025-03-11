@@ -14,6 +14,7 @@ namespace mrpc {
     class TCPClient {
     public:
         friend class TCPConnection;
+
         using ptr = std::shared_ptr<TCPClient>;
 
         // 默认获取当前线程的eventloop
@@ -62,7 +63,12 @@ namespace mrpc {
             return setSocketOption(level, option, result, sizeof(T));
         }
 
+        void setRunning(bool new_state) { m_is_running = new_state; }
+
+        bool getRunning() const { return m_is_running; }
+
     private:
+        bool m_is_running{false};
         NetAddr::ptr m_peer_addr;
         NetAddr::ptr m_local_addr;
         EventLoop::ptr m_event_loop;
