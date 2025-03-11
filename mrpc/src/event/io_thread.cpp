@@ -67,5 +67,9 @@ namespace mrpc {
         DEBUGLOG("IOThread %d end loop ", thread->m_thread_id);
         return nullptr; // void*的让他返回nullptr就可以
     }
+
+    void IOThread::stop() {
+        m_event_loop->stop();
+    }
 }
 

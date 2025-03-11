@@ -9,12 +9,11 @@
 #include <future>
 #include "net/tcp/net_addr.h"
 #include "net/tcp/tcp_client.h"
-#include "net/balance/hash_balance.h"
-#include "rpc/rpc_publish_listener.h"
 #include "rpc/rpc_controller.h"
 #include "rpc/rpc_closure.h"
 #include "common/log.h"
-#include "net/tcp/tcp_connection_pool.h"
+#include "rpc/rpc_client.h"
+
 
 #define NEW_MESSAGE(type, var_name) \
         std::shared_ptr<type> var_name = std::make_shared<type>(); \
@@ -34,6 +33,7 @@
 // channel连接注册中心进行discovery，注册中心收到后记录下channel的地址，然后向channel推送消息
 // channel是tcpclient，也是tcpserver，用来接收注册中心推送的消息
 namespace mrpc {
+
     class RPCChannel : public google::protobuf::RpcChannel, public std::enable_shared_from_this<RPCChannel> {
     public:
         using ptr = std::shared_ptr<RPCChannel>;
@@ -41,16 +41,12 @@ namespace mrpc {
         using google_message_ptr = std::shared_ptr<google::protobuf::Message>;
         using google_closure_ptr = std::shared_ptr<google::protobuf::Closure>;
 
-        explicit RPCChannel();
+        explicit RPCChannel(RPCClient::ptr rpc_client, ProtocolType protocol_type = ProtocolType::HTTP_Protocol);
 
         ~RPCChannel() override;
 
         void init(google_rpc_controller_ptr controller, google_message_ptr request,
                   google_message_ptr response, google_closure_ptr done);
-
-        void serviceDiscovery(const std::string &service_name);
-
-        std::string getAllServerList();
 
         void CallMethod(const google::protobuf::MethodDescriptor *method,
                         google::protobuf::RpcController *controller, const google::protobuf::Message *request,
@@ -114,31 +110,12 @@ namespace mrpc {
         google::protobuf::Closure *getClosure();
 
     private:
-        void updateCache(const std::string &service_name, std::string &server_list);
-
-    private:
         google_rpc_controller_ptr m_controller{nullptr};
         google_message_ptr m_request{nullptr};
         google_message_ptr m_response{nullptr};
         google_closure_ptr m_closure{nullptr};
-
-        NetAddr::ptr m_register_center_addr;
-        bool m_is_init{false}; // 是否初始化
         ProtocolType m_protocol_type;
-
-        std::unordered_map<std::string, std::set<std::string>> m_service_servers_cache; // service对应的多少个server
-        std::unordered_map<std::string, ConsistentHash::ptr> m_service_balance; // 一个service对应一个balance
-
-    public:
-        void subscribe(const std::string &service_name);
-
-        void handlePublish(Protocol::ptr request, Protocol::ptr response, Session::ptr session);
-
-    private:
-        PublishListener::ptr m_publish_listener;
-
-    private:
-        TCPClientPool::ptr m_tcp_client_pool;
+        RPCClient::ptr m_rpc_client;
     };
 }
 

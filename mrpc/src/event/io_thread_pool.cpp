@@ -9,7 +9,7 @@ namespace mrpc {
     IOThreadPool::IOThreadPool(int size) {
         m_io_thread_pools.resize(size);
         for (auto &m_io_thread: m_io_thread_pools) {
-            m_io_thread =std::make_unique<IOThread>();
+            m_io_thread = std::make_unique<IOThread>();
         }
     }
 
@@ -34,6 +34,12 @@ namespace mrpc {
             m_index = 0;
         }
         return m_io_thread_pools[m_index++];
+    }
+
+    void IOThreadPool::stop() {
+        for (const auto &m_io_thread: m_io_thread_pools) {
+            m_io_thread->stop();
+        }
     }
 
 }

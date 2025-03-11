@@ -47,20 +47,21 @@ namespace mrpc {
             m_idle_clients.pop();
             // 检查连接是否有效，有效去调用回调函数，即从外面传入的回调函数SendRequest, RecvResponse
             if (pooled_client.m_client->getState() == Connected) {
+                DEBUGLOG("=== NOT EMPTY === %d %d",m_idle_clients.size(),m_active_clients.size())
                 m_active_clients.emplace(pooled_client.m_client);
                 callback(pooled_client.m_client);
                 return;
             }
         }
         // 如果没有可用的空闲连接，且未达到最大连接数，则创建新连接，加入到活跃set中
-        if (m_active_clients.size() < m_max_size) {
-            createConnectionAsync([this, callback](TCPClient::ptr client) {
-                std::unique_lock<std::mutex> lock(m_mutex);
-                m_active_clients.emplace(client);
-                callback(client);
-            });
-            return;
-        }
+//        if (m_active_clients.size() < m_max_size) {
+//            createConnectionAsync([this, callback](TCPClient::ptr client) {
+//                std::unique_lock<std::mutex> lock(m_mutex);
+//                m_active_clients.emplace(client);
+//                callback(client);
+//            });
+//            return;
+//        }
         ERRORLOG("Failed to get connection from pool, active [%d], max [%d]",
                  m_active_clients.size(), m_max_size);
         callback(nullptr);

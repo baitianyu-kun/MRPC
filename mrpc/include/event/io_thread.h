@@ -25,6 +25,8 @@ namespace mrpc {
 
         void join();
 
+        void stop();
+
     public:
         static void *runner(void *arg);
 

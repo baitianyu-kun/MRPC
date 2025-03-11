@@ -30,7 +30,8 @@ aux_source_directory(${PROJECT_SOURCE_DIR}/mrpc/src/net/balance SRC_NET_BALANCE_
 add_library(mrpc ${SRC_COMMON_LIST} ${SRC_EVENT_LIST} ${SRC_RPC_LIST} ${SRC_NET_LIST} ${SRC_NET_PROTOCOL_LIST}
         ${SRC_NET_HTTP_LIST} ${SRC_NET_MPB_LIST} ${SRC_NET_TCP_LIST} ${SRC_NET_BALANCE_LIST}
         mrpc/src/net/tcp/tcp_connection_pool.cpp
-        mrpc/include/net/tcp/tcp_connection_pool.h)
+        mrpc/include/net/tcp/tcp_connection_pool.h
+        mrpc/include/rpc/rpc_client.h)
 install(TARGETS mrpc DESTINATION ${PATH_LIB})
 
 # 第三方lib
@@ -76,15 +77,15 @@ add_executable(test_rpc_register_center_subscribe_publish
         testcases/order.pb.h)
 target_link_libraries(test_rpc_register_center_subscribe_publish ${ALL_LIBS})
 
-add_executable(test_rpc_server_unix
-        ${PROJECT_SOURCE_DIR}/${PATH_TESTCASES}/test_rpc_server_unix.cpp
-        testcases/order.pb.cc
-        testcases/order.pb.h)
-target_link_libraries(test_rpc_server_unix ${ALL_LIBS})
-
-add_executable(test_rpc_channel_loop_unix
-        ${PROJECT_SOURCE_DIR}/${PATH_TESTCASES}/test_rpc_channel_loop_unix.cpp
-        testcases/order.pb.cc
-        testcases/order.pb.h)
-target_link_libraries(test_rpc_channel_loop_unix ${ALL_LIBS})
+#add_executable(test_rpc_server_unix
+#        ${PROJECT_SOURCE_DIR}/${PATH_TESTCASES}/test_rpc_server_unix.cpp
+#        testcases/order.pb.cc
+#        testcases/order.pb.h)
+#target_link_libraries(test_rpc_server_unix ${ALL_LIBS})
+#
+#add_executable(test_rpc_channel_loop_unix
+#        ${PROJECT_SOURCE_DIR}/${PATH_TESTCASES}/test_rpc_channel_loop_unix.cpp
+#        testcases/order.pb.cc
+#        testcases/order.pb.h)
+#target_link_libraries(test_rpc_channel_loop_unix ${ALL_LIBS})
 

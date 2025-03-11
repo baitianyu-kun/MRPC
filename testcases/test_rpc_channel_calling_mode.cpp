@@ -10,11 +10,22 @@
 
 using namespace mrpc;
 
-int main() {
+void initConfig() {
     Config::SetGlobalConfig("../conf/mrpc.xml");
     Logger::InitGlobalLogger(0);
+}
 
-    auto channel = std::make_shared<RPCChannel>();
+
+int main() {
+    initConfig();
+
+    auto client = std::make_shared<RPCClient>();
+
+    client->serviceDiscovery("Order");
+
+    while (client->getCacheSize() == 0) {} // 阻塞等待客户端进行服务发现
+
+    auto channel = std::make_shared<RPCChannel>(client, client->getProtocolType());
 
     auto request_msg = std::make_shared<makeOrderRequest>();
     request_msg->set_price(100);
@@ -26,12 +37,15 @@ int main() {
             std::bind(&Order_Stub::makeOrder, &stub, std::placeholders::_1, std::placeholders::_2,
                       std::placeholders::_3, std::placeholders::_4),
             request_msg,
-            [](std::shared_ptr<makeOrderResponse> response_msg) {
+            [client](std::shared_ptr<makeOrderResponse> response_msg) {
                 if (response_msg->order_id() == "20230514") {
                     INFOLOG("========= Success Call RPC By Async ==============");
                 }
+                client->getTCPClientPool()->stop();
             }
     );
+
+    client->getTCPClientPool()->join();
 
     auto future = channel->callRPCFuture<makeOrderRequest, makeOrderResponse>(
             std::bind(&Order_Stub::makeOrder, &stub, std::placeholders::_1, std::placeholders::_2,

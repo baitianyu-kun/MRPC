@@ -22,6 +22,8 @@ namespace mrpc {
 
         void join();
 
+        void stop();
+
         std::unique_ptr<IOThread>& getIOThread();
 
     private:

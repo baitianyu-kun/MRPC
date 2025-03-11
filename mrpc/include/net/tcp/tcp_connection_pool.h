@@ -18,7 +18,7 @@
 namespace mrpc {
     class TCPClientPool {
     public:
-        using ptr = std::unique_ptr<TCPClientPool>;
+        using ptr = std::shared_ptr<TCPClientPool>;
 
         TCPClientPool(NetAddr::ptr peer_addr,
                       EventLoop::ptr event_loop,
@@ -43,6 +43,10 @@ namespace mrpc {
         void createConnectionSync();
 
         void checkIdleClients();
+
+        void join() { m_io_thread_pool->join(); }
+
+        void stop() { m_io_thread_pool->stop(); }
 
 
     private:

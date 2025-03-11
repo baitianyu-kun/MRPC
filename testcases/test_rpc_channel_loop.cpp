@@ -9,19 +9,32 @@
 #include "rpc/rpc_controller.h"
 #include "rpc/rpc_closure.h"
 #include "order.pb.h"
+#include "rpc/rpc_client.h"
 
 using namespace mrpc;
 
-int main() {
+void initConfig() {
     Config::SetGlobalConfig("../conf/mrpc.xml");
     Logger::InitGlobalLogger(0);
+}
 
-    auto channel = std::make_shared<RPCChannel>();
+int main() {
+
+    initConfig();
+
+    auto client = std::make_shared<RPCClient>();
+
+    client->serviceDiscovery("Order");
+
+    while (client->getCacheSize() == 0) {} // 阻塞等待客户端进行服务发现
+
+    client->subscribe("Order");
+
+    auto channel = std::make_shared<RPCChannel>(client, client->getProtocolType());
 
     auto request_msg = std::make_shared<makeOrderRequest>();
     request_msg->set_price(100);
     request_msg->set_goods("apple");
-
     auto response_msg = std::make_shared<makeOrderResponse>();
     auto controller = std::make_shared<RPCController>();
 
@@ -40,17 +53,13 @@ int main() {
                      controller->GetErrorCode(),
                      controller->GetErrorInfo().c_str());
         }
-        INFOLOG("now exit client event loop");
     });
-
     controller->SetTimeout(2000); // 设置超时时间
     channel->init(controller, request_msg, response_msg, closure);
-
-    channel->subscribe("Order"); // 向注册中心订阅这个服务
 
     Order_Stub stub(channel.get());
     while (1) {
         stub.makeOrder(controller.get(), request_msg.get(), response_msg.get(), closure.get());
-        usleep(100000); // 休眠3秒
+        usleep(100000);
     }
 }
