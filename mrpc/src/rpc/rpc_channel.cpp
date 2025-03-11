@@ -65,26 +65,31 @@ namespace mrpc {
 
         auto this_channel = shared_from_this();
 
-        while (m_rpc_client->getClient()->getRunning()) {} // 一个连接上同时只能有一个请求
-        m_rpc_client->getClient()->setRunning(true);
-        m_rpc_client->getClient()->sendRequest(request_protocol, [this_channel, request_protocol](Protocol::ptr req) {
-            this_channel->m_rpc_client->getClient()->recvResponse(request_protocol->m_msg_id,
-                                                                  [this_channel, request_protocol](Protocol::ptr rsp) {
-                                                                      this_channel->getResponse()->ParseFromString(
-                                                                              rsp->m_body_data_map["pb_data"]);
-                                                                      INFOLOG("%s | success get rpc response, peer addr [%s], local addr[%s], response [%s]",
-                                                                              rsp->m_msg_id.c_str(),
-                                                                              this_channel->m_rpc_client->getClient()->getPeerAddr()->toString().c_str(),
-                                                                              this_channel->m_rpc_client->getClient()->getLocalAddr()->toString().c_str(),
-                                                                              this_channel->getResponse()->ShortDebugString().c_str());
-                                                                      if (this_channel->getClosure()) {
-                                                                          this_channel->getClosure()->Run();
-                                                                      }
-                                                                      this_channel->m_rpc_client->getClient()->resetNew();
-                                                                      this_channel->m_rpc_client->getClient()->setRunning(
-                                                                              false);
-                                                                  });
-        });
+        // 确认连接存活
+        if (m_rpc_client->getClient() and m_rpc_client->getClient()->getState() == TCPState::Connected) {
+            while (m_rpc_client->getClient()->getRunning()) {} // 一个连接上同时只能有一个请求
+            m_rpc_client->getClient()->setRunning(true);
+            m_rpc_client->getClient()->sendRequest(request_protocol,
+                                                   [this_channel, request_protocol](Protocol::ptr req) {
+                                                       this_channel->m_rpc_client->getClient()->recvResponse(
+                                                               request_protocol->m_msg_id,
+                                                               [this_channel, request_protocol](Protocol::ptr rsp) {
+                                                                   this_channel->getResponse()->ParseFromString(
+                                                                           rsp->m_body_data_map["pb_data"]);
+                                                                   INFOLOG("%s | success get rpc response, peer addr [%s], local addr[%s], response [%s]",
+                                                                           rsp->m_msg_id.c_str(),
+                                                                           this_channel->m_rpc_client->getClient()->getPeerAddr()->toString().c_str(),
+                                                                           this_channel->m_rpc_client->getClient()->getLocalAddr()->toString().c_str(),
+                                                                           this_channel->getResponse()->ShortDebugString().c_str());
+                                                                   if (this_channel->getClosure()) {
+                                                                       this_channel->getClosure()->Run();
+                                                                   }
+                                                                   this_channel->m_rpc_client->getClient()->resetNew();
+                                                                   this_channel->m_rpc_client->getClient()->setRunning(
+                                                                           false);
+                                                               });
+                                                   });
+        }
     }
 
     google::protobuf::RpcController *RPCChannel::getController() {

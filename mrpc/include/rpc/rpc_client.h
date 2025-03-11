@@ -28,7 +28,7 @@ namespace mrpc {
 
         ProtocolType getProtocolType() const { return m_protocol_type; }
 
-        void join() { call_io_thread->join(); }
+        void join() { m_call_io_thread->join(); }
 
     public:
         void subscribe(const std::string &service_name);
@@ -43,7 +43,7 @@ namespace mrpc {
 
     private:
         TCPClient::ptr m_server_client;
-        std::unique_ptr<IOThread> call_io_thread;
+        std::unique_ptr<IOThread> m_call_io_thread;
 
     private:
         std::unordered_map<std::string, std::set<std::string>> m_service_servers_cache; // service对应的多少个server

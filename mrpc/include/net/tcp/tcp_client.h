@@ -67,6 +67,8 @@ namespace mrpc {
 
         bool getRunning() const { return m_is_running; }
 
+        bool getState() const { return m_connection->getState(); }
+
     private:
         bool m_is_running{false};
         NetAddr::ptr m_peer_addr;

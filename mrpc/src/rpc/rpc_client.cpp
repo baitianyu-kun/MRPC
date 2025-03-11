@@ -16,8 +16,8 @@ namespace mrpc {
         } else {
             m_protocol_type = ProtocolType::HTTP_Protocol;
         }
-        call_io_thread = std::make_unique<IOThread>();
-        call_io_thread->start();
+        m_call_io_thread = std::make_unique<IOThread>();
+        m_call_io_thread->start();
     }
 
     RPCClient::~RPCClient() {
@@ -62,7 +62,7 @@ namespace mrpc {
                                                                                // 为服务器创建连接，以后的请求都使用这里的连接
                                                                                rpc_client->m_server_client = std::make_shared<TCPClient>(
                                                                                        server_addr,
-                                                                                       rpc_client->call_io_thread->getEventLoop(),
+                                                                                       rpc_client->m_call_io_thread->getEventLoop(),
                                                                                        rpc_client->m_protocol_type);
                                                                                bool is_connected = false;
                                                                                rpc_client->m_server_client->connect(
