@@ -7,7 +7,26 @@
 MRPC: Mini-RPC
 </h1>
 
-| [项目介绍](#项目介绍) | [安装](#安装) | [编译运行](#编译运行) | [性能测试](#性能测试) | [具体介绍](#具体介绍) | [项目问题及解决方案](#项目问题及解决方案) | [Ref](#Ref) |
+- [项目介绍](#项目介绍)
+- [安装](#安装)
+  - [1. Protobuf](#1-protobuf)
+  - [2. TinyXML2](#2-tinyxml2)
+- [编译运行](#编译运行)
+- [性能测试](#性能测试)
+  - [1. 使用wrk测试工具](#1-使用wrk测试工具)
+  - [2. 测试结果](#2-测试结果)
+- [具体介绍](#具体介绍)
+  - [1. 整体架构](#1-整体架构)
+  - [2. 通信协议与请求处理](#2-通信协议与请求处理)
+  - [3. 长连接](#3-长连接)
+  - [4. 服务注册](#4-服务注册)
+  - [5. 服务发现](#5-服务发现)
+  - [6. 负载均衡](#6-负载均衡)
+  - [7. 服务订阅/通知](#7-服务订阅通知)
+  - [8. 心跳检测](#8-心跳检测)
+  - [9. 异步调用方式](#9-异步调用方式)
+- [项目问题及解决方案](#项目问题及解决方案)
+- [Reference](#Reference)
 
 ## 项目介绍
 
@@ -457,18 +476,17 @@ channel->callRPCAsync<makeOrderRequest, makeOrderResponse>(
 ```
 ```C++
 template<typename RequestMsgType, typename ResponseMsgType>
-        void callRPCAsync(
-                std::function<void(RPCController *, RequestMsgType *, ResponseMsgType *, RPCClosure *)> call_method,
-                std::shared_ptr<RequestMsgType> request_msg,
-                std::function<void(std::shared_ptr<ResponseMsgType>)> response_msg_call_back) {
-            bool done = false; // 等待异步操作完成
-            callRPCAsyncIn<RequestMsgType, ResponseMsgType>(call_method, request_msg,
-                                                            [&done, response_msg_call_back](
-                                                                    std::shared_ptr<ResponseMsgType> response_msg) {
+void callRPCAsync(
+        std::function<void(RPCController *, RequestMsgType *, ResponseMsgType *, RPCClosure *)> call_method,
+        std::shared_ptr<RequestMsgType> request_msg,
+        std::function<void(std::shared_ptr<ResponseMsgType>)> response_msg_call_back) {
+        bool done = false; // 等待异步操作完成
+        callRPCAsyncIn<RequestMsgType, ResponseMsgType>(call_method, request_msg, [&done, response_msg_call_back](
+                                                                std::shared_ptr<ResponseMsgType> response_msg) {
                                                                 response_msg_call_back(response_msg);
                                                                 done = true;
-                                                            });
-            while (!done) {}
+                                                        });
+        while (!done) {}
         }
 ```
 - 使用`future`, 即将上述方法中回调函数部分更改为设置`promise`的值:
@@ -483,21 +501,20 @@ if (response_msg->order_id() == "20230514") {
 ```
 ```C++
 template<typename RequestMsgType, typename ResponseMsgType>
-        std::future<std::shared_ptr<ResponseMsgType>> callRPCFuture(
-                std::function<void(RPCController *, RequestMsgType *, ResponseMsgType *, RPCClosure *)> call_method,
-                std::shared_ptr<RequestMsgType> request_msg) {
-            auto promise = std::make_shared<std::promise<std::shared_ptr<ResponseMsgType>>>();
-            auto future = promise->get_future();
-            callRPCAsyncIn<RequestMsgType, ResponseMsgType>(call_method, request_msg,
-                                                            [promise](std::shared_ptr<ResponseMsgType> response_msg) {
-                                                                if (response_msg) {
-                                                                    promise->set_value(response_msg);
-                                                                } else {
-                                                                    promise->set_exception(std::make_exception_ptr(
-                                                                            std::runtime_error("error response_msg")));
-                                                                }
-                                                            });
-            return future;
+std::future<std::shared_ptr<ResponseMsgType>> callRPCFuture(
+        std::function<void(RPCController *, RequestMsgType *, ResponseMsgType *, RPCClosure *)> call_method,
+        std::shared_ptr<RequestMsgType> request_msg) {
+        auto promise = std::make_shared<std::promise<std::shared_ptr<ResponseMsgType>>>();
+        auto future = promise->get_future();
+        callRPCAsyncIn<RequestMsgType, ResponseMsgType>(call_method, request_msg,
+                                                        [promise](std::shared_ptr<ResponseMsgType> response_msg) {
+            if (response_msg) {
+                promise->set_value(response_msg);
+            } else {
+                promise->set_exception(std::make_exception_ptr(std::runtime_error("error response_msg")));
+            }
+        });
+        return future;
         }
 ```
 
@@ -529,7 +546,7 @@ client->connect([this_channel, request_protocol, weak_client]() {
        });
 ```
 
-## Ref
+## Reference
 由于该项目尚未经过充分的测试, 因此不适合在生产环境中使用。
 | Project        | Link                                                       |
 |----------------|------------------------------------------------------------|
