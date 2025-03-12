@@ -36,6 +36,8 @@ export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
 ldconfig
 ```
+
+
 ### 2. TinyXML2
 本项目引入[TinyXML2](https://github.com/leethomason/tinyxml2)头文件与源文件, 无需预先编译安装
 ## 编译运行
@@ -57,6 +59,8 @@ cmake .. && make -j16
 protoc --cpp_out=./ Service.proto
 ```
 生成`Service.pb.cc`和`Service.pb.h`文件, 随后参照示例编写业务代码即可。
+
+
 ## 性能测试
 ### 1. 使用[wrk](https://github.com/wg/wrk)测试工具
 系统配置: Ubuntu-20.04, 4核4G
@@ -259,6 +263,28 @@ class UnixDomainSocketAddr : public NetAddr {
 ```
 
 ### 3. 长连接
+客户端在采用负载均衡获取到服务端地址后创建长连接, 随后使用该长连接进行通信。同时服务端与注册中心建立长连接, 进行服务注册以及心跳包发送。整体避免短连接造成的巨大资源开销。使用长连接时需要保证每次连接有效, 同时为了方便每次每个请求上最多只有一个连接。在短连接的时候可以较为方便的全部使用异步操作, 例如Connect成功后便可以自动调用Send和Recv的回调函数(一个IO线程负责一个连接, 用后即销毁/放入线程池中)。如果在长连接下, 全部使用回调函数较为地狱, 例如在进行服务发现的时候如果要进行异步的Connect, 则需要将Send和Recv的回调函数全部传入或者绑定到服务发现中, 代码可读性下降。所以在长连接下部分操作使用了阻塞式连接, 最好的方法是使用协程, 可以以同步的方式去编写异步的代码。
+```C++
+// 建立长连接
+rpc_client->m_server_client = std::make_shared<TCPClient>(...);
+rpc_client->m_server_client->connect(...);
+
+// 建立长连接, 连接注册中心, 随后注册以及心跳均使用该连接
+m_register_client = std::make_shared<TCPClient>(...);
+m_register_client->connect(...);
+```
+```C++
+if (m_rpc_client->getClient() and m_rpc_client->getClient()->getState() == TCPState::Connected) {
+            while (m_rpc_client->getClient()->getRunning()) {} // 一个连接上同时只能有一个请求
+            m_rpc_client->getClient()->setRunning(true);
+            m_rpc_client->getClient()->sendRequest(... {
+                this_channel->m_rpc_client->getClient()->recvResponse(... {
+                    this_channel->m_rpc_client->getClient()->resetNew(); // 使用完成后清空连接缓冲区, 取消监听事件, 以便于下次使用
+                    this_channel->m_rpc_client->getClient()->setRunning(false);
+                                  });
+                    });
+        }
+```
 
 ### 4. 服务注册
 每台服务器在启动时均会向注册中心注册提供的服务名以及地址端口等, 注册中心维护一个服务名到服务器列表的映射, 同时还需要维护服务器在线状态, 将在心跳检测部分提到:
@@ -309,6 +335,7 @@ auto server_addr = m_service_balance[method->service()->full_name()]->getServer(
 ```
 ### 7. 服务订阅/通知
 当服务器下线或者上线时, 需要及时通知订阅了该服务的客户端更新缓存。  
+
 比较常见的有推和拉两种模式, 前者是注册中心负责推送, 后者是客户端以一个固定的轮询时间向注册中心拉取更新。在这里采用推拉结合的方式, 当服务器上线或者下线, 注册中心返回一个通知, 客户端收到该通知后重新拉取服务器列表。使用推拉结合的优点就是推的消息较为轻量, 减轻注册中心压力, 同时扩展简单, 无需根据具体业务场景定义推送内容, 支持较多场景。
 ```C++
 // 客户端去执行订阅
@@ -430,24 +457,18 @@ channel->callRPCAsync<makeOrderRequest, makeOrderResponse>(
 ```
 ```C++
 template<typename RequestMsgType, typename ResponseMsgType>
-void callRPCAsync(
-        std::function<void(RPCController *, RequestMsgType *, ResponseMsgType *, RPCClosure *)> call_method,
-        std::shared_ptr<RequestMsgType> request_msg,
-        std::function<void(std::shared_ptr<ResponseMsgType>)> response_msg_call_back) {
-            ...
-            auto closure = std::make_shared<RPCClosure>(
-                    [request_msg, response_msg, controller, response_msg_call_back]() mutable {
-                        if (controller->GetErrorCode() == 0) {
-                            if (response_msg_call_back) {
-                                response_msg_call_back(response_msg);
-                            }
-                        } else {
-                            if (response_msg_call_back) {
-                                response_msg_call_back(nullptr);
-                            }
-                        }
-                    });
-            ...
+        void callRPCAsync(
+                std::function<void(RPCController *, RequestMsgType *, ResponseMsgType *, RPCClosure *)> call_method,
+                std::shared_ptr<RequestMsgType> request_msg,
+                std::function<void(std::shared_ptr<ResponseMsgType>)> response_msg_call_back) {
+            bool done = false; // 等待异步操作完成
+            callRPCAsyncIn<RequestMsgType, ResponseMsgType>(call_method, request_msg,
+                                                            [&done, response_msg_call_back](
+                                                                    std::shared_ptr<ResponseMsgType> response_msg) {
+                                                                response_msg_call_back(response_msg);
+                                                                done = true;
+                                                            });
+            while (!done) {}
         }
 ```
 - 使用`future`, 即将上述方法中回调函数部分更改为设置`promise`的值:
@@ -458,22 +479,24 @@ auto future = channel->callRPCFuture<makeOrderRequest, makeOrderResponse>(
 auto response_msg = future.get();
 if (response_msg->order_id() == "20230514") {
     INFOLOG("========= Success Call RPC By Future ==============");
-}
+        }
 ```
 ```C++
 template<typename RequestMsgType, typename ResponseMsgType>
-std::future<std::shared_ptr<ResponseMsgType>> callRPCFuture(
-        std::function<void(RPCController *, RequestMsgType *, ResponseMsgType *, RPCClosure *)> call_method,
-        std::shared_ptr<RequestMsgType> request_msg) {
+        std::future<std::shared_ptr<ResponseMsgType>> callRPCFuture(
+                std::function<void(RPCController *, RequestMsgType *, ResponseMsgType *, RPCClosure *)> call_method,
+                std::shared_ptr<RequestMsgType> request_msg) {
             auto promise = std::make_shared<std::promise<std::shared_ptr<ResponseMsgType>>>();
             auto future = promise->get_future();
-            callRPCAsync<RequestMsgType,ResponseMsgType>(call_method, request_msg, [promise](std::shared_ptr<ResponseMsgType> response_msg) {
-                if (response_msg) {
-                    promise->set_value(response_msg);
-                } else {
-                    promise->set_exception(std::make_exception_ptr(std::runtime_error("error response_msg")));
-                }
-            });
+            callRPCAsyncIn<RequestMsgType, ResponseMsgType>(call_method, request_msg,
+                                                            [promise](std::shared_ptr<ResponseMsgType> response_msg) {
+                                                                if (response_msg) {
+                                                                    promise->set_value(response_msg);
+                                                                } else {
+                                                                    promise->set_exception(std::make_exception_ptr(
+                                                                            std::runtime_error("error response_msg")));
+                                                                }
+                                                            });
             return future;
         }
 ```
