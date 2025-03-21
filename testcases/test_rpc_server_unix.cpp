@@ -4,6 +4,7 @@
 #include <google/protobuf/service.h>
 #include <google/protobuf/stubs/callback.h>
 #include <csignal>
+#include <unistd.h>
 #include "rpc/rpc_server.h"
 #include "order.pb.h"
 
