@@ -33,7 +33,7 @@ public:
 };
 
 int main() {
-    Config::SetGlobalConfig("../conf/mrpc3.xml");
+    Config::SetGlobalConfig("../../conf/mrpc3.xml");
     Logger::InitGlobalLogger(0);
 
     auto local_addr = std::make_shared<mrpc::IPNetAddr>(Config::GetGlobalConfig()->m_rpc_server_listen_ip,

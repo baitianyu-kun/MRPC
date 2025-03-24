@@ -46,6 +46,12 @@ namespace mrpc {
 
         void cancel_listen(TriggerEventType event_type);
 
+        void clear_callbacks() {
+            m_read_callback = nullptr;
+            m_write_callback = nullptr;
+            m_error_callback = nullptr;
+        }
+
         int getFD() const {
             return m_fd;
         }

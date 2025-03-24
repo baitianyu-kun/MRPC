@@ -13,7 +13,7 @@
 using namespace mrpc;
 
 void initConfig() {
-    Config::SetGlobalConfig("../conf/mrpc.xml");
+    Config::SetGlobalConfig("../../conf/mrpc.xml");
     Logger::InitGlobalLogger(0);
 }
 

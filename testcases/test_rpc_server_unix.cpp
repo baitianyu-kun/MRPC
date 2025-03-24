@@ -35,7 +35,7 @@ public:
 };
 
 int main() {
-    Config::SetGlobalConfig("../conf/mrpc.xml");
+    Config::SetGlobalConfig("../../conf/mrpc.xml");
     Logger::InitGlobalLogger(0);
 
     unlink("/tmp/mysock12");
