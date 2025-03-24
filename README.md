@@ -549,6 +549,14 @@ client->connect([this_channel, request_protocol, weak_client]() {
             }
        });
 ```
+3. `FDEvent`中回调函数执行完成后清空
+```C++
+void clear_callbacks() {
+            m_read_callback = nullptr;
+            m_write_callback = nullptr;
+            m_error_callback = nullptr;
+        }
+```
 
 ## Reference
 由于该项目尚未经过充分的测试, 因此不适合在生产环境中使用。
