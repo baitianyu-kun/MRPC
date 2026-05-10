@@ -6,6 +6,7 @@
 #define RPCFRAME_TCP_CONNECTION_H
 
 #include <memory>
+#include <coroutine>
 #include "net/tcp/net_addr.h"
 #include "net/tcp/tcp_vector_buffer.h"
 #include "net/protocol/parse.h"
@@ -48,11 +49,40 @@ namespace mrpc {
 
         void onWrite();
 
-        void pushSendMessage(const Protocol::ptr &request,
-                             const std::function<void(Protocol::ptr)> &done);
+        struct RecvAwaiter {
+            TCPConnection* conn;
+            std::string msg_id;
+            Protocol::ptr result;
 
-        void pushReadMessage(const std::string &msg_id,
-                             const std::function<void(Protocol::ptr)> &done);
+            bool await_ready() const noexcept { return false; }
+            void await_suspend(std::coroutine_handle<> h) noexcept {
+                conn->m_read_dones.emplace(msg_id, std::make_pair(h, &result));
+                conn->listenRead();
+            }
+            Protocol::ptr await_resume() noexcept {
+                return result;
+            }
+        };
+
+        struct SendAwaiter {
+            TCPConnection* conn;
+            Protocol::ptr request;
+
+            bool await_ready() const noexcept { return false; }
+            void await_suspend(std::coroutine_handle<> h) noexcept {
+                conn->m_write_dones.emplace_back(request, h);
+                conn->listenWrite();
+            }
+            void await_resume() noexcept {}
+        };
+
+        SendAwaiter sendRequest(const Protocol::ptr &request) {
+            return {this, request};
+        }
+
+        RecvAwaiter recvResponse(const std::string &msg_id) {
+            return {this, msg_id, nullptr};
+        }
 
         void setState(TCPState new_state);
 
@@ -83,6 +113,13 @@ namespace mrpc {
             listenRead();
         }
 
+    public:
+        // 客户端收到信息后，根据msg id找到对应的response的协程句柄和结果指针
+        std::unordered_map<std::string, std::pair<std::coroutine_handle<>, Protocol::ptr*>> m_read_dones;
+
+        // key是request，value是对应的协程句柄
+        std::vector<std::pair<Protocol::ptr, std::coroutine_handle<>>> m_write_dones;
+
     private:
         EventLoop::ptr m_event_loop;
         NetAddr::ptr m_local_addr;
@@ -98,12 +135,6 @@ namespace mrpc {
         ProtocolParser::ptr m_request_parser;
         ProtocolParser::ptr m_response_parser;
         ProtocolType m_protocol_type;
-
-        // 客户端收到信息后，根据msg id找到对应的response的回调函数，在回调函数里可以判断response的一些状态，比如是否成功，是否获取到相应数据
-        std::unordered_map<std::string, std::function<void(Protocol::ptr)>> m_read_dones;
-
-        // key是request，value是该request对应的回调函数
-        std::vector<std::pair<Protocol::ptr, std::function<void(Protocol::ptr)>>> m_write_dones;
 
         // 客户端收发数据过程中出现错误需要进行处理的函数
         std::function<void()> m_client_error_done;

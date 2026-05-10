@@ -22,9 +22,11 @@ namespace mrpc {
                                                         m_protocol_type);
         // 连接注册中心，随后注册以及心跳均使用该连接
         bool is_connected = false;
-        m_register_client->connect(
-                [&is_connected]() { is_connected = true; },
-                true);
+        auto runner = [&]() -> mrpc::Task<void> {
+            is_connected = co_await m_register_client->connect();
+        };
+        auto task = runner();
+        task.resume();
         while (!is_connected) {}
     }
 
@@ -54,18 +56,23 @@ namespace mrpc {
             MPbManager::createRequest(std::static_pointer_cast<MPbProtocol>(request),
                                       MSGType::RPC_REGISTER_HEART_SERVER_REQUEST, body);
         }
-        while (m_register_client->getRunning()) {} // 一个连接上同时只能有一个请求
-        m_register_client->setRunning(true);
-        m_register_client->sendRequest(request, [this, request](Protocol::ptr req) {
-            m_register_client->recvResponse(request->m_msg_id, [this, request](Protocol::ptr rsp) {
+        
+        auto runner = [this, request]() -> mrpc::Task<void> {
+            while (m_register_client->getRunning()) {} // 一个连接上同时只能有一个请求
+            m_register_client->setRunning(true);
+            co_await m_register_client->sendRequest(request);
+            auto rsp = co_await m_register_client->recvResponse(request->m_msg_id);
+            if (rsp) {
                 INFOLOG("%s | success heart to center, peer addr [%s], local addr[%s]",
                         rsp->m_msg_id.c_str(),
                         m_register_client->getPeerAddr()->toString().c_str(),
                         m_register_client->getLocalAddr()->toString().c_str());
-                m_register_client->resetNew();
-                m_register_client->setRunning(false);
-            });
-        });
+            }
+            m_register_client->resetNew();
+            m_register_client->setRunning(false);
+        };
+        auto task = runner();
+        task.resume();
     }
 
     void RPCServer::registerToCenter() {
@@ -83,19 +90,24 @@ namespace mrpc {
             MPbManager::createRequest(std::static_pointer_cast<MPbProtocol>(request),
                                       MSGType::RPC_SERVER_REGISTER_REQUEST, body);
         }
-        while (m_register_client->getRunning()) {} // 一个连接上同时只能有一个请求
-        m_register_client->setRunning(true);
-        m_register_client->sendRequest(request, [this, request](Protocol::ptr req) {
-            m_register_client->recvResponse(request->m_msg_id, [this, request](Protocol::ptr rsp) {
+        
+        auto runner = [this, request]() -> mrpc::Task<void> {
+            while (m_register_client->getRunning()) {} // 一个连接上同时只能有一个请求
+            m_register_client->setRunning(true);
+            co_await m_register_client->sendRequest(request);
+            auto rsp = co_await m_register_client->recvResponse(request->m_msg_id);
+            if (rsp) {
                 INFOLOG("%s | success register to center, peer addr [%s], local addr[%s], add_service_count [%s]",
                         rsp->m_msg_id.c_str(),
                         m_register_client->getPeerAddr()->toString().c_str(),
                         m_register_client->getLocalAddr()->toString().c_str(),
                         rsp->m_body_data_map["add_service_count"].c_str());
-                m_register_client->resetNew();
-                m_register_client->setRunning(false);
-            });
-        });
+            }
+            m_register_client->resetNew();
+            m_register_client->setRunning(false);
+        };
+        auto task = runner();
+        task.resume();
     }
 
     void RPCServer::startRPC() {

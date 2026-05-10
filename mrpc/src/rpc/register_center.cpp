@@ -260,13 +260,18 @@ namespace mrpc {
                                       MSGType::RPC_REGISTER_CLIENT_PUBLISH_REQUEST, body);
         }
 
-        client->connect([&client, request, service_name]() {
-            client->sendRequest(request, [&client, request, service_name](Protocol::ptr req) {
-                INFOLOG("%s | publish message to peer addr %s", req->m_msg_id.c_str(),
+        auto runner = [&]() -> mrpc::Task<void> {
+            bool success = co_await client->connect();
+            if (success) {
+                co_await client->sendRequest(request);
+                INFOLOG("%s | publish message to peer addr %s", request->m_msg_id.c_str(),
                         client->getPeerAddr()->toString().c_str());
-                client->getEventLoop()->stop();
-            });
-        });
+            }
+            client->getEventLoop()->stop();
+        };
+
+        auto task = runner();
+        task.resume();
         io_thread->start();
     }
 }

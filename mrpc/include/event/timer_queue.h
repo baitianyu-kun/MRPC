@@ -7,6 +7,7 @@
 
 #include <vector>
 #include <set>
+#include <coroutine>
 #include "event/timer.h"
 #include "event/fd_event.h"
 
@@ -28,6 +29,33 @@ namespace mrpc {
         TimerId addTimer(TimerCallback cb, Timestamp when, double interval);
 
         void deleteTimer(TimerId timerId);
+
+        // Coroutine support
+        struct TimerAwaiter {
+            TimerQueue* m_timer_queue;
+            Timestamp m_when;
+            TimerId m_timer_id;
+
+            bool await_ready() const noexcept { return false; }
+            
+            void await_suspend(std::coroutine_handle<> handle) noexcept {
+                m_timer_id = m_timer_queue->addTimer([handle]() mutable {
+                    if (handle && !handle.done()) {
+                        handle.resume();
+                    }
+                }, m_when, 0.0);
+            }
+            
+            void await_resume() noexcept {
+                // If it resumed, the timer naturally expired and was handled/removed.
+                // Or we could proactively delete it if cancellation was supported, but 
+                // for simple sleep it naturally completes.
+            }
+        };
+
+        TimerAwaiter sleep_until(Timestamp when) {
+            return {this, when, TimerId(nullptr, -1)};
+        }
 
     private:
 

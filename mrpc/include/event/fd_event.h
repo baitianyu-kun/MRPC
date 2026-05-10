@@ -8,6 +8,7 @@
 #include <functional>
 #include <sys/epoll.h>
 #include <memory>
+#include <coroutine>
 
 #define WAKE_UP_BUFF_LEN 8
 
@@ -46,6 +47,12 @@ namespace mrpc {
 
         void cancel_listen(TriggerEventType event_type);
 
+        void clear_callback(TriggerEventType event_type) {
+            if (event_type == IN_EVENT) m_read_callback = nullptr;
+            else if (event_type == OUT_EVENT) m_write_callback = nullptr;
+            else if (event_type == ERROR_EVENT) m_error_callback = nullptr;
+        }
+
         void clear_callbacks() {
             m_read_callback = nullptr;
             m_write_callback = nullptr;
@@ -58,6 +65,35 @@ namespace mrpc {
 
         epoll_event getEpollEvent() {
             return m_listen_event;
+        }
+
+        // Coroutine support
+        struct SocketAwaiter {
+            FDEvent* m_event;
+            TriggerEventType m_event_type;
+
+            bool await_ready() const noexcept { return false; }
+            
+            void await_suspend(std::coroutine_handle<> handle) noexcept {
+                m_event->listen(m_event_type, [handle]() mutable {
+                    if (handle && !handle.done()) {
+                        handle.resume();
+                    }
+                });
+            }
+            
+            void await_resume() noexcept {
+                m_event->cancel_listen(m_event_type);
+                m_event->clear_callback(m_event_type);
+            }
+        };
+
+        SocketAwaiter awaitRead() {
+            return {this, TriggerEventType::IN_EVENT};
+        }
+
+        SocketAwaiter awaitWrite() {
+            return {this, TriggerEventType::OUT_EVENT};
         }
 
     protected: // 因为要继承给WakeUpFDEvent

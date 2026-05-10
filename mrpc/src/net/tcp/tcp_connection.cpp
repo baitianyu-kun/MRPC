@@ -125,9 +125,14 @@ namespace mrpc {
             m_response_parser->parse(tmp_str);
             auto iter = m_read_dones.find(m_response_parser->getProtocol()->m_msg_id);
             if (iter != m_read_dones.end()) {
-                auto done = iter->second;
+                auto handle_pair = iter->second;
                 m_read_dones.erase(iter);
-                done(m_response_parser->getProtocol());
+                if (handle_pair.second) {
+                    *(handle_pair.second) = m_response_parser->getProtocol();
+                }
+                if (handle_pair.first && !handle_pair.first.done()) {
+                    handle_pair.first.resume();
+                }
             } else {
                 DEBUGLOG("not found response_msg_id: %s", m_response_parser->getProtocol()->m_msg_id.c_str());
             }
@@ -187,19 +192,12 @@ namespace mrpc {
         }
         if (m_connection_type == TCPConnectionByClient) {
             for (const auto &write_done: m_write_dones) {
-                write_done.second(write_done.first);
+                if (write_done.second && !write_done.second.done()) {
+                    write_done.second.resume();
+                }
             }
             m_write_dones.clear(); // 清空回调函数
         }
-    }
-
-    void
-    TCPConnection::pushSendMessage(const Protocol::ptr &request, const std::function<void(Protocol::ptr)> &done) {
-        m_write_dones.emplace_back(request, done);
-    }
-
-    void TCPConnection::pushReadMessage(const std::string &msg_id, const std::function<void(Protocol::ptr)> &done) {
-        m_read_dones.emplace(msg_id, done);
     }
 
     void TCPConnection::setState(TCPState new_state) {

@@ -40,51 +40,39 @@ namespace mrpc {
         m_active_clients.clear();
     }
 
-    void TCPClientPool::getConnectionAsync(std::function<void(TCPClient::ptr)> callback) {
+    mrpc::Task<TCPClient::ptr> TCPClientPool::getConnection() {
         std::unique_lock<std::mutex> lock(m_mutex);
         while (!m_idle_clients.empty()) {
             auto pooled_client = m_idle_clients.front();
             m_idle_clients.pop();
-            // 检查连接是否有效，有效去调用回调函数，即从外面传入的回调函数SendRequest, RecvResponse
             if (pooled_client.m_client->getState() == Connected) {
                 DEBUGLOG("=== NOT EMPTY === %d %d",m_idle_clients.size(),m_active_clients.size())
                 m_active_clients.emplace(pooled_client.m_client);
-                callback(pooled_client.m_client);
-                return;
+                co_return pooled_client.m_client;
             }
         }
-        // 如果没有可用的空闲连接，且未达到最大连接数，则创建新连接，加入到活跃set中
-//        if (m_active_clients.size() < m_max_size) {
-//            createConnectionAsync([this, callback](TCPClient::ptr client) {
-//                std::unique_lock<std::mutex> lock(m_mutex);
-//                m_active_clients.emplace(client);
-//                callback(client);
-//            });
-//            return;
-//        }
         ERRORLOG("Failed to get connection from pool, active [%d], max [%d]",
                  m_active_clients.size(), m_max_size);
-        callback(nullptr);
+        co_return nullptr;
     }
 
-    void TCPClientPool::createConnectionAsync(std::function<void(TCPClient::ptr)> callback) {
+    mrpc::Task<TCPClient::ptr> TCPClientPool::createConnection() {
         auto client = std::make_shared<TCPClient>(m_peer_addr,
                                                   m_io_thread_pool->getIOThread()->getEventLoop(),
                                                   m_protocol_type);
-        // 连接成功后将自己加入到空闲队列中
-        client->connect([client, callback]() {
-            callback(client);
-        }, true);
+        bool success = co_await client->connect();
+        if (success) {
+            co_return client;
+        }
+        co_return nullptr;
     }
 
     void TCPClientPool::releaseClient(TCPClient::ptr client) {
         if (!client) return;
         std::unique_lock<std::mutex> lock(m_mutex);
-        // 从活跃连接集合中移除
         auto it = m_active_clients.find(client);
         if (it != m_active_clients.end()) {
             m_active_clients.erase(it);
-            // 如果连接仍然有效，则放回空闲队列，否则自动销毁
             if (client->getState() == Connected) {
                 m_idle_clients.emplace(client);
             }
@@ -95,10 +83,12 @@ namespace mrpc {
         auto client = std::make_shared<TCPClient>(m_peer_addr,
                                                   m_io_thread_pool->getIOThread()->getEventLoop(),
                                                   m_protocol_type);
-        // 初始创建连接池时采用阻塞式连接
         bool is_connected = false;
-        client->connect([&is_connected]() { is_connected = true; }, true);
-        while (!is_connected) {}
+        auto task_runner = [&]() -> mrpc::Task<void> {
+            is_connected = co_await client->connect();
+        };
+        task_runner();
+        while (!is_connected && client->getState() != Closed) {}
         if (is_connected) {
             m_idle_clients.emplace(client);
         }
@@ -108,7 +98,6 @@ namespace mrpc {
         std::unique_lock<std::mutex> lock(m_mutex);
         auto now = Timestamp::now();
         std::queue<PooledClient> temp_queue;
-        // 检查所有空闲连接有无掉线和超时
         while (!m_idle_clients.empty()) {
             auto pooled_client = m_idle_clients.front();
             m_idle_clients.pop();
@@ -118,13 +107,16 @@ namespace mrpc {
             }
             temp_queue.emplace(pooled_client);
         }
-        // 保留有效连接
         m_idle_clients = std::move(temp_queue);
-        // 维持最小连接数
         while ((m_idle_clients.size() + m_active_clients.size()) < m_min_size) {
-            createConnectionAsync([this](TCPClient::ptr client) {
-                m_active_clients.emplace(client);
-            });
+            auto runner = [this]() -> mrpc::Task<void> {
+                auto client = co_await createConnection();
+                if (client) {
+                    std::unique_lock<std::mutex> lock(m_mutex);
+                    m_active_clients.emplace(client);
+                }
+            };
+            runner();
         }
     }
 }

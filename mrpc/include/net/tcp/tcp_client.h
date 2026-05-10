@@ -8,6 +8,7 @@
 #include "net/tcp/net_addr.h"
 #include "event/eventloop.h"
 #include "net/tcp/tcp_connection.h"
+#include "common/coroutine_task.h"
 
 namespace mrpc {
 
@@ -24,11 +25,11 @@ namespace mrpc {
 
         ~TCPClient();
 
-        void connect(std::function<void()> done, bool is_already_in_loop = false);
+        mrpc::Task<bool> connect();
 
-        void sendRequest(const Protocol::ptr &request, const std::function<void(Protocol::ptr)> &done);
+        mrpc::Task<void> sendRequest(const Protocol::ptr &request);
 
-        void recvResponse(const std::string &msg_id, const std::function<void(Protocol::ptr)> &done);
+        mrpc::Task<Protocol::ptr> recvResponse(const std::string &msg_id);
 
         void onConnectionError();
 

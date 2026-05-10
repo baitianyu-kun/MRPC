@@ -57,77 +57,57 @@ namespace mrpc {
         }
     }
 
-    void TCPClient::connect(std::function<void()> done, bool is_already_in_loop) {
+    mrpc::Task<bool> TCPClient::connect() {
         int ret = ::connect(m_client_fd, m_peer_addr->getSockAddr(), m_peer_addr->getSockAddrLen());
         if (ret == 0) {
             DEBUGLOG("connect [%s] success", m_peer_addr->toString().c_str());
             m_connection->setState(Connected);
             initLocalAddr();
-            if (done) {
-                done();
-            }
-            if (!is_already_in_loop) {
-                if (m_event_loop->LoopStopFlag()) {
-                    m_event_loop->setLoopStopFlag();
-                }
-                m_event_loop->loop();
-            }
+            co_return true;
         } else if (ret == -1) {
             if (errno == EINPROGRESS) {
-                m_fd_event->listen(FDEvent::OUT_EVENT, [this, done]() {
-                    int ret = ::connect(m_client_fd, m_peer_addr->getSockAddr(), m_peer_addr->getSockAddrLen());
-                    if ((ret == 0) || (ret < 0 && errno == EISCONN)) {
-                        // 连接成功
-                        DEBUGLOG("connect [%s] success", m_peer_addr->toString().c_str());
-                        m_connection->setState(Connected);
-                        initLocalAddr();
-                    } else {
-                        if (errno == ECONNREFUSED) {
-                            m_connect_err_code = ERROR_PEER_CLOSED;
-                            m_connect_err_info = "connect refused, sys error = " + std::string(strerror(errno));
-                        } else {
-                            m_connect_err_code = ERROR_FAILED_CONNECT;
-                            m_connect_err_info = "connect unknown error, sys error = " + std::string(strerror(errno));
-                        }
-                        ERRORLOG("connect error, errno = %d, error = %s", errno, strerror(errno));
-                        close(m_client_fd);
-                        m_client_fd = socket(m_peer_addr->getFamily(), SOCK_STREAM, 0);
-                    }
-                    m_event_loop->deleteEpollEvent(m_fd_event);
-                    // 无论成功失败都得调用回调，否则外面无法获取出错的状态，即无法调用获取出错，或者获取成功的状态
-                    if (done) {
-                        done();
-                    }
-                });
                 m_event_loop->addEpollEvent(m_fd_event);
-                if (!is_already_in_loop) {
-                    if (m_event_loop->LoopStopFlag()) {
-                        m_event_loop->setLoopStopFlag();
+                co_await m_fd_event->awaitWrite();
+
+                int ret2 = ::connect(m_client_fd, m_peer_addr->getSockAddr(), m_peer_addr->getSockAddrLen());
+                if ((ret2 == 0) || (ret2 < 0 && errno == EISCONN)) {
+                    // 连接成功
+                    DEBUGLOG("connect [%s] success", m_peer_addr->toString().c_str());
+                    m_connection->setState(Connected);
+                    initLocalAddr();
+                    m_event_loop->deleteEpollEvent(m_fd_event);
+                    co_return true;
+                } else {
+                    if (errno == ECONNREFUSED) {
+                        m_connect_err_code = ERROR_PEER_CLOSED;
+                        m_connect_err_info = "connect refused, sys error = " + std::string(strerror(errno));
+                    } else {
+                        m_connect_err_code = ERROR_FAILED_CONNECT;
+                        m_connect_err_info = "connect unknown error, sys error = " + std::string(strerror(errno));
                     }
-                    m_event_loop->loop();
+                    ERRORLOG("connect error, errno = %d, error = %s", errno, strerror(errno));
+                    close(m_client_fd);
+                    m_client_fd = socket(m_peer_addr->getFamily(), SOCK_STREAM, 0);
+                    m_event_loop->deleteEpollEvent(m_fd_event);
+                    co_return false;
                 }
             } else {
                 ERRORLOG("connect error, errno = %d, error = %s", errno, strerror(errno));
                 // 需要返回具体的错误码
                 m_connect_err_code = ERROR_FAILED_CONNECT;
                 m_connect_err_info = "connect error, sys error = " + std::string(strerror(errno));
-                // 无论成功失败都得调用回调，否则外面无法获取出错的状态，即无法调用获取出错，或者获取成功的状态
-                if (done) {
-                    done();
-                }
+                co_return false;
             }
         }
+        co_return false;
     }
 
-    void TCPClient::sendRequest(const Protocol::ptr &request, const std::function<void(Protocol::ptr)> &done) {
-        m_connection->pushSendMessage(request, done);
-        m_connection->listenWrite(); // 监听可写的时候写入就行了
+    mrpc::Task<void> TCPClient::sendRequest(const Protocol::ptr &request) {
+        co_await m_connection->sendRequest(request);
     }
 
-    void
-    TCPClient::recvResponse(const std::string &msg_id, const std::function<void(Protocol::ptr)> &done) {
-        m_connection->pushReadMessage(msg_id, done);
-        m_connection->listenRead(); // 去监听可读事件
+    mrpc::Task<Protocol::ptr> TCPClient::recvResponse(const std::string &msg_id) {
+        co_return co_await m_connection->recvResponse(msg_id);
     }
 
     NetAddr::ptr TCPClient::getPeerAddr() {

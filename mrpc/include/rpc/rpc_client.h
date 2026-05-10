@@ -18,7 +18,7 @@ namespace mrpc {
 
         ~RPCClient();
 
-        void serviceDiscovery(const std::string &service_name);
+        mrpc::Task<void> serviceDiscovery(const std::string &service_name);
 
         std::string getAllServerList();
 
@@ -31,7 +31,7 @@ namespace mrpc {
         void join() { m_call_io_thread->join(); }
 
     public:
-        void subscribe(const std::string &service_name);
+        mrpc::Task<void> subscribe(const std::string &service_name);
 
         void handlePublish(Protocol::ptr request, Protocol::ptr response, Session::ptr session);
 

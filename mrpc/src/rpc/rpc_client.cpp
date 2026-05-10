@@ -24,7 +24,7 @@ namespace mrpc {
         DEBUGLOG("~RPCClient")
     }
 
-    void RPCClient::serviceDiscovery(const std::string &service_name) {
+    mrpc::Task<void> RPCClient::serviceDiscovery(const std::string &service_name) {
         auto io_thread = std::make_unique<IOThread>();
         auto register_client = std::make_shared<TCPClient>(m_register_center_addr, io_thread->getEventLoop(),
                                                            m_protocol_type);
@@ -41,42 +41,36 @@ namespace mrpc {
             MPbManager::createRequest(std::static_pointer_cast<MPbProtocol>(request),
                                       MSGType::RPC_CLIENT_REGISTER_DISCOVERY_REQUEST, body);
         }
-        register_client->connect([&register_client, request, rpc_client, service_name]() {
-            register_client->sendRequest(request,
-                                         [&register_client, request, rpc_client, service_name](Protocol::ptr req) {
-                                             register_client->recvResponse(request->m_msg_id,
-                                                                           [&register_client, request, rpc_client, service_name](
-                                                                                   Protocol::ptr rsp) {
-                                                                               // 更新本地缓存
-                                                                               auto server_list_str = rsp->m_body_data_map["server_list"];
-                                                                               rpc_client->updateCache(service_name,
-                                                                                                       server_list_str);
-                                                                               // 获取本地ip地址，根据该ip地址去进行hash选择
-                                                                               auto local_ip = getLocalIP();
-                                                                               auto server_addr = rpc_client->m_service_balance[service_name]->getServer(
-                                                                                       local_ip);
-                                                                               DEBUGLOG(
-                                                                                       "local ip [%s], choosing server [%s]",
-                                                                                       local_ip.c_str(),
-                                                                                       server_addr->toString().c_str());
-                                                                               // 为服务器创建连接，以后的请求都使用这里的连接
-                                                                               rpc_client->m_server_client = std::make_shared<TCPClient>(
-                                                                                       server_addr,
-                                                                                       rpc_client->m_call_io_thread->getEventLoop(),
-                                                                                       rpc_client->m_protocol_type);
-                                                                               bool is_connected = false;
-                                                                               rpc_client->m_server_client->connect(
-                                                                                       [&is_connected]() { is_connected = true; },
-                                                                                       true);
-                                                                               while (!is_connected) {}
-                                                                               INFOLOG("%s | get server cache from register center, server list [%s]",
-                                                                                       rsp->m_msg_id.c_str(),
-                                                                                       rpc_client->getAllServerList().c_str());
-                                                                               register_client->getEventLoop()->stop();
-                                                                           });
-                                         });
-        });
+        
+        auto runner = [&]() -> mrpc::Task<void> {
+            bool is_connected = co_await register_client->connect();
+            if (is_connected) {
+                co_await register_client->sendRequest(request);
+                auto rsp = co_await register_client->recvResponse(request->m_msg_id);
+                if (rsp) {
+                    auto server_list_str = rsp->m_body_data_map["server_list"];
+                    rpc_client->updateCache(service_name, server_list_str);
+                    auto local_ip = getLocalIP();
+                    auto server_addr = rpc_client->m_service_balance[service_name]->getServer(local_ip);
+                    DEBUGLOG("local ip [%s], choosing server [%s]", local_ip.c_str(), server_addr->toString().c_str());
+                    
+                    rpc_client->m_server_client = std::make_shared<TCPClient>(
+                            server_addr,
+                            rpc_client->m_call_io_thread->getEventLoop(),
+                            rpc_client->m_protocol_type);
+                    
+                    bool server_connected = co_await rpc_client->m_server_client->connect();
+                    INFOLOG("%s | get server cache from register center, server list [%s]",
+                            rsp->m_msg_id.c_str(), rpc_client->getAllServerList().c_str());
+                }
+            }
+            register_client->getEventLoop()->stop();
+        };
+
+        auto task = runner();
+        task.resume();
         io_thread->start();
+        co_return;
     }
 
     std::string RPCClient::getAllServerList() {
@@ -92,7 +86,7 @@ namespace mrpc {
         return tmp;
     }
 
-    void RPCClient::subscribe(const std::string &service_name) {
+    mrpc::Task<void> RPCClient::subscribe(const std::string &service_name) {
         body_type body;
         body["service_name"] = service_name;
         Protocol::ptr request = nullptr;
@@ -109,19 +103,21 @@ namespace mrpc {
         auto register_client = std::make_shared<TCPClient>(m_register_center_addr,
                                                            io_thread->getEventLoop(),
                                                            m_protocol_type);
-        register_client->connect([&register_client, request, service_name]() {
-            register_client->sendRequest(request, [&register_client, request, service_name](Protocol::ptr req) {
-                register_client->recvResponse(request->m_msg_id,
-                                              [&register_client, request, service_name](Protocol::ptr rsp) {
-                                                  register_client->getEventLoop()->stop();
-                                                  if (rsp->m_body_data_map["subscribe_success"] ==
-                                                      std::to_string(true)) {
-                                                      INFOLOG("%s | success subscribe service name %s",
-                                                              rsp->m_msg_id.c_str(), service_name.c_str());
-                                                  }
-                                              });
-            });
-        });
+        
+        auto runner = [&]() -> mrpc::Task<void> {
+            bool is_connected = co_await register_client->connect();
+            if (is_connected) {
+                co_await register_client->sendRequest(request);
+                auto rsp = co_await register_client->recvResponse(request->m_msg_id);
+                if (rsp && rsp->m_body_data_map["subscribe_success"] == std::to_string(true)) {
+                    INFOLOG("%s | success subscribe service name %s", rsp->m_msg_id.c_str(), service_name.c_str());
+                }
+            }
+            register_client->getEventLoop()->stop();
+        };
+
+        auto task = runner();
+        task.resume();
         io_thread->start();
 
         // start listener at register client addr, call back is handlePublish，在handlePublish中重新执行从注册中心拉取操作
@@ -133,14 +129,10 @@ namespace mrpc {
                                                                          std::placeholders::_2,
                                                                          std::placeholders::_3),
                                                                m_protocol_type);
+        co_return;
     }
 
     void RPCClient::handlePublish(Protocol::ptr request, Protocol::ptr response, Session::ptr session) {
-        DEBUGLOG("update channel server cache before: [%s]", getAllServerList().c_str());
-        auto service_name = request->m_body_data_map["service_name"];
-        serviceDiscovery(service_name); // 收到服务器通知后重新请求服务信息，推拉结合
-        DEBUGLOG("update channel server cache after: [%s]", getAllServerList().c_str());
-
         body_type body;
         body["msg_id"] = request->m_msg_id;
         if (m_protocol_type == ProtocolType::HTTP_Protocol) {
@@ -154,6 +146,15 @@ namespace mrpc {
                 request->m_msg_id.c_str(),
                 session->getPeerAddr()->toString().c_str(),
                 session->getLocalAddr()->toString().c_str());
+
+        auto runner = [this, request]() -> mrpc::Task<void> {
+            DEBUGLOG("update channel server cache before: [%s]", getAllServerList().c_str());
+            auto service_name = request->m_body_data_map["service_name"];
+            co_await serviceDiscovery(service_name); // 收到服务器通知后重新请求服务信息，推拉结合
+            DEBUGLOG("update channel server cache after: [%s]", getAllServerList().c_str());
+        };
+        auto task = runner();
+        task.resume();
     }
 
     void RPCClient::updateCache(const std::string &service_name, std::string &server_list) {

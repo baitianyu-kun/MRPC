@@ -31,13 +31,13 @@ namespace mrpc {
         ~TCPClientPool();
 
         // 获取一个异步连接，是TCPClient负责发送和接收消息，以及处理回调，所以TCP连接池实际上就是Client连接池
-        void getConnectionAsync(std::function<void(TCPClient::ptr)> callback);
+        mrpc::Task<TCPClient::ptr> getConnection();
 
         // 归还一个连接
         void releaseClient(TCPClient::ptr client);
 
         // 异步创建一个新的连接
-        void createConnectionAsync(std::function<void(TCPClient::ptr)> callback);
+        mrpc::Task<TCPClient::ptr> createConnection();
 
         // 同步创建connection
         void createConnectionSync();
